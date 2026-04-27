@@ -107,8 +107,8 @@ public class TeacherWebHandler {
                     .append("<h2>").append(AttendanceServer.escape(tokenService.getActiveSubject())).append("</h2>")
                     .append("<p>").append(AttendanceServer.escape(tokenService.getActiveClassName())).append(" | ").append(AttendanceServer.escape(tokenService.getActiveTopic())).append("</p>")
                     
-                    .append("<div id=\"qr-container\" style=\"margin:20px auto; width:300px; height:300px; background:#fff; border-radius:12px; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--line);\">")
-                    .append("<div id=\"qr-grid\" style=\"display:grid; width:280px; height:280px; gap:0;\"><p style='align-self:center;'>Generating QR...</p></div>")
+                    .append("<div id=\"qr-container\" style=\"margin:20px auto; width:300px; height:300px; background:#fff; border-radius:12px; display:flex; align-items:center; justify-content:center; overflow:hidden; border:2px solid var(--dark); padding:10px;\">")
+                    .append("<div id=\"qr-box\" style=\"width:100%; height:100%;\">Loading QR...</div>")
                     .append("</div>")
                     .append("<p class=\"muted\">Scanning QR Code... (Updates every 5s)</p>")
                     
@@ -142,18 +142,9 @@ public class TeacherWebHandler {
 
             content.append("<script>")
                     .append("function updateQR() {")
-                    .append("  fetch('/teacher-qr').then(r => r.json()).then(data => {")
-                    .append("    const grid = document.getElementById('qr-grid');")
-                    .append("    if (!data || data.length === 0) return;")
-                    .append("    grid.innerHTML = '';")
-                    .append("    grid.style.gridTemplateColumns = `repeat(${data.length}, 1fr) `;")
-                    .append("    data.forEach(row => {")
-                    .append("      row.forEach(cell => {")
-                    .append("        const div = document.createElement('div');")
-                    .append("        div.style.backgroundColor = cell ? 'var(--dark)' : 'transparent';")
-                    .append("        grid.appendChild(div);")
-                    .append("      });")
-                    .append("    });")
+                    .append("  fetch('/teacher-qr').then(r => r.text()).then(svg => {")
+                    .append("    if (!svg) return;")
+                    .append("    document.getElementById('qr-box').innerHTML = svg;")
                     .append("  });")
                     .append("}")
                     .append("updateQR(); setInterval(updateQR, 5000);")
@@ -213,20 +204,16 @@ public class TeacherWebHandler {
 
     public void handleQr(HttpExchange exchange) throws IOException {
         if (!tokenService.isSessionActive()) {
-            AttendanceServer.sendJson(exchange, 404, "[]");
+            AttendanceServer.sendHtml(exchange, 404, "");
             return;
         }
-        boolean[][] matrix = QrCodeGenerator.generateQr(tokenService.getCurrentToken().getValue());
-        StringBuilder json = new StringBuilder("[");
-        for (int i = 0; i < matrix.length; i++) {
-            json.append("[");
-            for (int j = 0; j < matrix[i].length; j++) {
-                json.append(matrix[i][j]).append(j < matrix[i].length - 1 ? "," : "");
-            }
-            json.append("]").append(i < matrix.length - 1 ? "," : "");
+        String svg = QrCodeGenerator.generateSvg(tokenService.getCurrentToken().getValue());
+        exchange.getResponseHeaders().add("Content-Type", "image/svg+xml");
+        byte[] bytes = svg.getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(200, bytes.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(bytes);
         }
-        json.append("]");
-        AttendanceServer.sendJson(exchange, 200, json.toString());
     }
 
     public void handleExport(HttpExchange exchange) throws IOException {

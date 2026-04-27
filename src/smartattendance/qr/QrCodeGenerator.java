@@ -17,6 +17,24 @@ public final class QrCodeGenerator {
     private QrCodeGenerator() {
     }
 
+    public static String generateSvg(String text) {
+        boolean[][] modules = generateQr(text);
+        StringBuilder svg = new StringBuilder();
+        svg.append("<svg viewBox=\"0 0 ").append(SIZE).append(" ").append(SIZE).append("\" xmlns=\"http://www.w3.org/2000/svg\">");
+        svg.append("<rect width=\"100%\" height=\"100%\" fill=\"white\"/>");
+        svg.append("<path d=\"");
+        for (int y = 0; y < SIZE; y++) {
+            for (int x = 0; x < SIZE; x++) {
+                if (modules[y][x]) {
+                    svg.append("M").append(x).append(",").append(y).append("h1v1h-1z ");
+                }
+            }
+        }
+        svg.append("\" fill=\"black\"/>");
+        svg.append("</svg>");
+        return svg.toString();
+    }
+
     public static BufferedImage createQrImage(String text, int scale, int quietZone) {
         boolean[][] modules = generateQr(text);
         int qrPixels = (SIZE + quietZone * 2) * scale;
