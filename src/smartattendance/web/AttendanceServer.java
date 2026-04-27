@@ -119,11 +119,9 @@ public class AttendanceServer {
         sendHtml(exchange, 200, page("Smart Attendance Portal",
                 "<div class=\"eyebrow\">Welcome</div>"
                         + "<h1>Smart Attendance System</h1>"
-                        + "<p class=\"muted\">Select your portal to continue.</p>"
+                        + "<p class=\"muted\">Please login to scan attendance.</p>"
                         + "<div style=\"display:flex; flex-direction:column; gap:16px; margin-top:24px;\">"
-                        + "<a class=\"button-link\" style=\"text-align:center;\" href=\"/student-login\">Student Portal</a>"
-                        + "<a class=\"button-link secondary\" style=\"text-align:center;\" href=\"/teacher-login\">Teacher Portal</a>"
-                        + "<a class=\"button-link secondary\" style=\"text-align:center;\" href=\"/admin-login\">Admin Portal</a>"
+                        + "<a class=\"button-link\" style=\"text-align:center;\" href=\"/student-login\">Student Portal / Login</a>"
                         + "</div>"));
     }
 

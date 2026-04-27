@@ -10,20 +10,40 @@ import java.awt.*;
 
 public class AdminFrame extends JFrame {
     private final AttendanceStore store;
+    private final Runnable onLogout;
 
-    public AdminFrame(AttendanceStore store) {
+    public AdminFrame(AttendanceStore store, Runnable onLogout) {
         this.store = store;
+        this.onLogout = onLogout;
+        
         setTitle("Admin Management Portal");
         setSize(900, 700);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(new Color(79, 70, 229));
+        header.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+        
+        JLabel title = new JLabel("Admin Control Panel", SwingConstants.LEFT);
+        title.setForeground(Color.WHITE);
+        title.setFont(new Font("Inter", Font.BOLD, 18));
+        header.add(title, BorderLayout.WEST);
+
+        JButton logoutBtn = new JButton("Logout");
+        logoutBtn.addActionListener(e -> {
+            dispose();
+            if (onLogout != null) onLogout.run();
+        });
+        header.add(logoutBtn, BorderLayout.EAST);
+        add(header, BorderLayout.NORTH);
 
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("Students", createStudentPanel());
         tabs.addTab("Teachers", createTeacherPanel());
         tabs.addTab("Subjects", createSubjectPanel());
         
-        add(tabs);
+        add(tabs, BorderLayout.CENTER);
     }
 
     private JPanel createStudentPanel() {
