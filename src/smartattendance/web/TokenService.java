@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
 
 public class TokenService {
     // Increased to 60 seconds because free servers like Render can be slow
-    public static final int REFRESH_SECONDS = 60;
+    public static final int REFRESH_SECONDS = 10;
 
     private final SecureRandom random = new SecureRandom();
     private final List<TokenListener> listeners = new CopyOnWriteArrayList<>();

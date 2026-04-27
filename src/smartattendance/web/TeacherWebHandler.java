@@ -5,7 +5,6 @@ import smartattendance.model.Teacher;
 import smartattendance.model.AttendanceRecord;
 import smartattendance.model.ClassSession;
 import smartattendance.store.AttendanceStore;
-import smartattendance.qr.QrCodeGenerator;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -111,9 +110,9 @@ public class TeacherWebHandler {
                     .append("<p>").append(AttendanceServer.escape(tokenService.getActiveClassName())).append(" | ").append(AttendanceServer.escape(tokenService.getActiveTopic())).append("</p>")
                     
                     .append("<div id=\"qr-container\" style=\"margin:20px auto; width:300px; height:300px; background:#fff; border-radius:12px; display:flex; align-items:center; justify-content:center; overflow:hidden; border:2px solid var(--dark); padding:10px;\">")
-                    .append("<div id=\"qr-box\" style=\"width:100%; height:100%;\">Loading QR...</div>")
+                    .append("<div id=\"qr-canvas\" style=\"width:280px; height:280px;\"></div>")
                     .append("</div>")
-                    .append("<p class=\"muted\">Scanning QR Code... (Updates every 5s)</p>")
+                    .append("<p class=\"muted\">QR Code rotates every 10s for high security.</p>")
                     
                     .append("<form method=\"post\" action=\"/teacher-stop-session\" style=\"margin-top:20px;\">")
                     .append("<button type=\"submit\" style=\"background:#dc2626;\">Stop Session & Finalize</button>")
@@ -143,15 +142,17 @@ public class TeacherWebHandler {
                     .append("<table><thead><tr><th>ID</th><th>Name</th><th>Time</th><th>Status</th></tr></thead><tbody>").append(rows).append("</tbody></table>")
                     .append("</div></div>");
 
-            content.append("<script>")
+            content.append("<script src=\"https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js\"></script>")
+                    .append("<script>")
+                    .append("const qr = new QRCode(document.getElementById('qr-canvas'), { width: 280, height: 280 });")
                     .append("function updateQR() {")
-                    .append("  fetch('/teacher-qr').then(r => r.text()).then(svg => {")
-                    .append("    if (!svg) return;")
-                    .append("    document.getElementById('qr-box').innerHTML = svg;")
+                    .append("  fetch('/teacher-qr').then(r => r.json()).then(data => {")
+                    .append("    if (!data.url) return;")
+                    .append("    qr.makeCode(data.url);")
                     .append("  });")
                     .append("}")
-                    .append("updateQR(); setInterval(updateQR, 10000);")
-                    .append("setInterval(() => { if(window.innerWidth > 800) location.reload(); }, 30000);")
+                    .append("updateQR(); setInterval(updateQR, 5000);")
+                    .append("setInterval(() => { if(window.innerWidth > 800) location.reload(); }, 20000);")
                     .append("</script>");
         }
 
@@ -245,16 +246,12 @@ public class TeacherWebHandler {
 
     public void handleQr(HttpExchange exchange) throws IOException {
         if (!tokenService.isSessionActive()) {
-            AttendanceServer.sendHtml(exchange, 404, "");
+            AttendanceServer.sendJson(exchange, 404, "{}");
             return;
         }
-        String svg = QrCodeGenerator.generateSvg(tokenService.getCurrentToken().getValue());
-        exchange.getResponseHeaders().add("Content-Type", "image/svg+xml");
-        byte[] bytes = svg.getBytes(StandardCharsets.UTF_8);
-        exchange.sendResponseHeaders(200, bytes.length);
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(bytes);
-        }
+        String qrUrl = "/scan?token=" + tokenService.getCurrentToken().getValue() + "&subject=" + java.net.URLEncoder.encode(tokenService.getActiveSubject(), StandardCharsets.UTF_8);
+        String json = "{\"url\": \"" + qrUrl + "\"}";
+        AttendanceServer.sendJson(exchange, 200, json);
     }
 
     public void handleExport(HttpExchange exchange) throws IOException {
