@@ -42,7 +42,7 @@ public final class Main {
                         if ("ADMIN".equals(type)) {
                             new AdminFrame(store).setVisible(true);
                         } else {
-                            new TeacherHomeFrame(tokenService, store).setVisible(true);
+                            new TeacherHomeFrame(tokenService, store, server.getBaseUrl()).setVisible(true);
                         }
                     } else {
                         System.exit(0);

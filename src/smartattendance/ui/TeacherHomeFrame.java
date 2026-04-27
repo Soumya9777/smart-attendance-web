@@ -6,18 +6,21 @@ import smartattendance.store.AttendanceStore;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.datatransfer.StringSelection;
 import java.time.LocalTime;
 
 public class TeacherHomeFrame extends JFrame {
     private final TokenService tokenService;
     private final AttendanceStore store;
+    private final String serverUrl;
     private final JLabel qrLabel;
     private final JLabel statusLabel;
     private final JLabel infoLabel;
 
-    public TeacherHomeFrame(TokenService tokenService, AttendanceStore store) {
+    public TeacherHomeFrame(TokenService tokenService, AttendanceStore store, String serverUrl) {
         this.tokenService = tokenService;
         this.store = store;
+        this.serverUrl = serverUrl;
         
         setTitle("Teacher Dashboard");
         setSize(550, 750);
@@ -48,10 +51,10 @@ public class TeacherHomeFrame extends JFrame {
         add(qrLabel, BorderLayout.CENTER);
 
         // Control Panel
-        JPanel controls = new JPanel(new GridLayout(2, 1, 5, 5));
+        JPanel controls = new JPanel(new GridLayout(3, 1, 5, 5));
         JButton startBtn = new JButton("Start Session");
         JButton stopBtn = new JButton("Stop Session");
-        JButton historyBtn = new JButton("View Records");
+        JButton copyBtn = new JButton("Copy Student Link");
 
         startBtn.addActionListener(e -> startSessionDialog());
         stopBtn.addActionListener(e -> {
@@ -64,11 +67,17 @@ public class TeacherHomeFrame extends JFrame {
                 } catch (Exception ex) { ex.printStackTrace(); }
             }
         });
+        
+        copyBtn.addActionListener(e -> {
+            StringSelection selection = new StringSelection(serverUrl);
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+            JOptionPane.showMessageDialog(this, "Link Copied: " + serverUrl);
+        });
 
         JPanel btnGroup = new JPanel();
         btnGroup.add(startBtn);
         btnGroup.add(stopBtn);
-        btnGroup.add(historyBtn);
+        btnGroup.add(copyBtn);
         controls.add(btnGroup);
 
         statusLabel = new JLabel("Offline", SwingConstants.CENTER);
@@ -100,9 +109,9 @@ public class TeacherHomeFrame extends JFrame {
     private void updateUI() {
         if (tokenService.isSessionActive()) {
             infoLabel.setText(tokenService.getActiveSubject() + " (" + tokenService.getActiveClassName() + ")");
-            statusLabel.setText("Active: " + tokenService.getCurrentToken().getValue());
+            statusLabel.setText("Active (Rotating 1s)");
             
-            String qrUrl = "/scan?token=" + tokenService.getCurrentToken().getValue() + "&subject=" + tokenService.getActiveSubject();
+            String qrUrl = serverUrl + "/scan?token=" + tokenService.getCurrentToken().getValue() + "&subject=" + tokenService.getActiveSubject();
             qrLabel.setIcon(new ImageIcon(QrCodeGenerator.createQrImage(qrUrl, 10, 1)));
         } else {
             infoLabel.setText("No Session Active");

@@ -7,7 +7,6 @@ import smartattendance.store.AttendanceStore;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.util.List;
 
 public class AdminFrame extends JFrame {
     private final AttendanceStore store;
@@ -40,13 +39,21 @@ public class AdminFrame extends JFrame {
         JButton delBtn = new JButton("Delete Student");
         
         addBtn.addActionListener(e -> {
-            String id = JOptionPane.showInputDialog("Enter Student ID:");
-            String name = JOptionPane.showInputDialog("Enter Student Name:");
-            if (id != null && name != null) {
+            JTextField idField = new JTextField();
+            JTextField nameField = new JTextField();
+            JPasswordField passField = new JPasswordField();
+            Object[] message = {
+                "Student ID:", idField,
+                "Student Name:", nameField,
+                "Password:", passField
+            };
+
+            int option = JOptionPane.showConfirmDialog(null, message, "Add New Student", JOptionPane.OK_CANCEL_OPTION);
+            if (option == JOptionPane.OK_OPTION) {
                 try {
-                    store.saveStudent(new Student(id, name, "PASS123"));
+                    store.saveStudent(new Student(idField.getText(), nameField.getText(), new String(passField.getPassword())));
                     refreshStudents(model);
-                } catch (Exception ex) { ex.printStackTrace(); }
+                } catch (Exception ex) { JOptionPane.showMessageDialog(this, ex.getMessage()); }
             }
         });
 
@@ -81,13 +88,21 @@ public class AdminFrame extends JFrame {
         JButton delBtn = new JButton("Delete Teacher");
 
         addBtn.addActionListener(e -> {
-            String id = JOptionPane.showInputDialog("Enter Teacher ID:");
-            String name = JOptionPane.showInputDialog("Enter Teacher Name:");
-            if (id != null && name != null) {
+            JTextField idField = new JTextField();
+            JTextField nameField = new JTextField();
+            JPasswordField passField = new JPasswordField();
+            Object[] message = {
+                "Teacher ID:", idField,
+                "Teacher Name:", nameField,
+                "Password:", passField
+            };
+
+            int option = JOptionPane.showConfirmDialog(null, message, "Add New Teacher", JOptionPane.OK_CANCEL_OPTION);
+            if (option == JOptionPane.OK_OPTION) {
                 try {
-                    store.saveTeacher(new Teacher(id, name, "PASS123"));
+                    store.saveTeacher(new Teacher(idField.getText(), nameField.getText(), new String(passField.getPassword())));
                     refreshTeachers(model);
-                } catch (Exception ex) { ex.printStackTrace(); }
+                } catch (Exception ex) { JOptionPane.showMessageDialog(this, ex.getMessage()); }
             }
         });
 
