@@ -2,7 +2,7 @@
 FROM eclipse-temurin:17-jdk-alpine AS build
 WORKDIR /app
 COPY src/ ./src/
-COPY data/ ./data/
+RUN mkdir -p data
 COPY nist.png ./
 
 # Compile all Java files
@@ -12,9 +12,9 @@ RUN mkdir out && find src -name "*.java" > sources.txt && javac -d out @sources.
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
-# Copy compiled classes and data
+# Copy compiled classes
 COPY --from=build /app/out ./out
-COPY --from=build /app/data ./data
+RUN mkdir -p data
 COPY --from=build /app/nist.png ./
 
 # Expose port (Cloud providers will provide PORT env var)
