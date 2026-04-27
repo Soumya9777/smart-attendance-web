@@ -207,7 +207,8 @@ public class TeacherWebHandler {
             AttendanceServer.sendHtml(exchange, 404, "");
             return;
         }
-        String svg = QrCodeGenerator.generateSvg(tokenService.getCurrentToken().getValue());
+        String qrUrl = "/scan?token=" + tokenService.getCurrentToken().getValue() + "&subject=" + java.net.URLEncoder.encode(tokenService.getActiveSubject(), StandardCharsets.UTF_8);
+        String svg = QrCodeGenerator.generateSvg(qrUrl);
         exchange.getResponseHeaders().add("Content-Type", "image/svg+xml");
         byte[] bytes = svg.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(200, bytes.length);
