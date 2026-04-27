@@ -77,6 +77,7 @@ public class AttendanceServer {
         server.createContext("/teacher-stop-session", teacherHandler::handleStopSession);
         server.createContext("/teacher-qr", teacherHandler::handleQr);
         server.createContext("/teacher-export", teacherHandler::handleExport);
+        server.createContext("/teacher-history", teacherHandler::handleHistory);
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
         server.start();
         baseUrl = (secure ? "https://" : "http://") + localAddress + ":" + port;

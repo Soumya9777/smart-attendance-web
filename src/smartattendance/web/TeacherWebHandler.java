@@ -3,6 +3,7 @@ package smartattendance.web;
 import com.sun.net.httpserver.HttpExchange;
 import smartattendance.model.Teacher;
 import smartattendance.model.AttendanceRecord;
+import smartattendance.model.ClassSession;
 import smartattendance.store.AttendanceStore;
 import smartattendance.qr.QrCodeGenerator;
 
@@ -76,8 +77,10 @@ public class TeacherWebHandler {
 
         StringBuilder content = new StringBuilder();
         content.append("<div class=\"eyebrow\">Teacher Portal</div>");
+        content.append("<div style=\"display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;\">");
         content.append("<h1>Welcome, ").append(AttendanceServer.escape(teacher.getName())).append("</h1>");
-        content.append("<p><a class=\"button-link secondary\" href=\"/teacher-logout\">Logout</a></p>");
+        content.append("<div><a class=\"button-link\" href=\"/teacher-history\" style=\"margin-right:10px;\">View History</a>");
+        content.append("<a class=\"button-link secondary\" href=\"/teacher-logout\">Logout</a></div></div>");
 
         if (!tokenService.isSessionActive()) {
             // Show Start Session Form
@@ -91,7 +94,7 @@ public class TeacherWebHandler {
                     .append("<h2>Start New Attendance Session</h2>")
                     .append("<form method=\"post\" action=\"/teacher-start-session\">")
                     .append("<label>Class Name (e.g. CS-2024)<input name=\"className\" required></label>")
-                    .append("<label>Subject<select name=\"subject\">").append(subjectOptions).append("</select></label>")
+                    .append("<label>Subject<select name=\"subject\" style=\"width:100%; padding:14px; border-radius:12px; border:1px solid #d1d5db; background:#f9fafb;\">").append(subjectOptions).append("</select></label>")
                     .append("<label>Topic<input name=\"topic\" placeholder=\"Current lesson topic\"></label>")
                     .append("<div style=\"display:flex; gap:20px;\">")
                     .append("<label style=\"flex:1;\">Start Time<input type=\"time\" name=\"startTime\" value=\"").append(LocalTime.now().toString().substring(0, 5)).append("\" required></label>")
@@ -148,11 +151,49 @@ public class TeacherWebHandler {
                     .append("  });")
                     .append("}")
                     .append("updateQR(); setInterval(updateQR, 5000);")
-                    .append("setInterval(() => location.reload(), 30000);") // Refresh list every 30s
+                    .append("setInterval(() => { if(window.innerWidth > 800) location.reload(); }, 30000);")
                     .append("</script>");
         }
 
         AttendanceServer.sendHtml(exchange, 200, AttendanceServer.page("Teacher Dashboard", content.toString()));
+    }
+
+    public void handleHistory(HttpExchange exchange) throws IOException {
+        Optional<Teacher> teacher = currentTeacher(exchange);
+        if (teacher.isEmpty()) {
+            AttendanceServer.redirect(exchange, "/teacher-login");
+            return;
+        }
+
+        StringBuilder content = new StringBuilder();
+        content.append("<div class=\"eyebrow\">Attendance Records</div>");
+        content.append("<h1>Global Attendance History</h1>");
+        content.append("<p><a class=\"button-link secondary\" href=\"/teacher-dashboard\">Back to Dashboard</a></p>");
+
+        for (String subject : store.findAllSubjects()) {
+            List<ClassSession> sessions = store.findClassSessions(subject);
+            if (sessions.isEmpty()) continue;
+
+            content.append("<div class=\"date-card\" style=\"margin-top:30px;\">");
+            content.append("<h2 style=\"margin-top:0;\">").append(AttendanceServer.escape(subject)).append("</h2>");
+            content.append("<table><thead><tr><th>Date</th><th>Class</th><th>Time</th><th>Topic</th><th>Count</th></tr></thead><tbody>");
+            
+            for (ClassSession s : sessions) {
+                int count = store.findAttendanceByDate(s.getDate(), subject).stream()
+                        .filter(r -> r.getStartTime().equals(s.getStartTime()))
+                        .toList().size();
+                
+                content.append("<tr><td>").append(s.getDate())
+                        .append("</td><td>").append(AttendanceServer.escape(s.getClassName()))
+                        .append("</td><td>").append(s.getStartTime()).append("-").append(s.getEndTime())
+                        .append("</td><td>").append(AttendanceServer.escape(s.getTopic()))
+                        .append("</td><td style=\"font-weight:700; color:var(--primary);\">").append(count)
+                        .append("</td></tr>");
+            }
+            content.append("</tbody></table></div>");
+        }
+
+        AttendanceServer.sendHtml(exchange, 200, AttendanceServer.page("Attendance History", content.toString()));
     }
 
     public void handleStartSession(HttpExchange exchange) throws IOException {
@@ -207,8 +248,7 @@ public class TeacherWebHandler {
             AttendanceServer.sendHtml(exchange, 404, "");
             return;
         }
-        String qrUrl = "/scan?token=" + tokenService.getCurrentToken().getValue() + "&subject=" + java.net.URLEncoder.encode(tokenService.getActiveSubject(), StandardCharsets.UTF_8);
-        String svg = QrCodeGenerator.generateSvg(qrUrl);
+        String svg = QrCodeGenerator.generateSvg(tokenService.getCurrentToken().getValue());
         exchange.getResponseHeaders().add("Content-Type", "image/svg+xml");
         byte[] bytes = svg.getBytes(StandardCharsets.UTF_8);
         exchange.sendResponseHeaders(200, bytes.length);
