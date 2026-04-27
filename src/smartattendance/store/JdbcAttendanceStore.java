@@ -428,6 +428,37 @@ public class JdbcAttendanceStore implements AttendanceStore {
         return records;
     }
 
+    @Override
+    public void deleteClassSession(String subject, LocalDate date, LocalTime startTime) throws IOException {
+        try (Connection connection = connect()) {
+            connection.setAutoCommit(false);
+            try {
+                // Delete attendance records first
+                try (PreparedStatement st = connection.prepareStatement(
+                        "DELETE FROM attendance WHERE UPPER(subject) = UPPER(?) AND attendance_date = ? AND start_time = ?")) {
+                    st.setString(1, subject);
+                    st.setString(2, date.toString());
+                    st.setString(3, startTime.toString());
+                    st.executeUpdate();
+                }
+                // Delete session record
+                try (PreparedStatement st = connection.prepareStatement(
+                        "DELETE FROM class_sessions WHERE UPPER(subject) = UPPER(?) AND attendance_date = ? AND start_time = ?")) {
+                    st.setString(1, subject);
+                    st.setString(2, date.toString());
+                    st.setString(3, startTime.toString());
+                    st.executeUpdate();
+                }
+                connection.commit();
+            } catch (SQLException e) {
+                connection.rollback();
+                throw e;
+            }
+        } catch (SQLException exception) {
+            throw new IOException("Could not delete class session", exception);
+        }
+    }
+
     private Connection connect() throws SQLException {
         if (username == null || username.isBlank()) {
             return DriverManager.getConnection(jdbcUrl);

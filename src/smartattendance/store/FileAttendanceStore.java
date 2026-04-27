@@ -525,4 +525,54 @@ public class FileAttendanceStore implements AttendanceStore {
         values.add(current.toString());
         return values;
     }
+    @Override
+    public synchronized void deleteClassSession(String subject, LocalDate date, LocalTime startTime) throws IOException {
+        // Delete the session record
+        List<String> keptSessions = new ArrayList<>();
+        try (BufferedReader reader = Files.newBufferedReader(sessionsFile, StandardCharsets.UTF_8)) {
+            String header = reader.readLine();
+            keptSessions.add(header);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                List<String> columns = parseCsv(line);
+                boolean matches = columns.size() >= 4
+                        && columns.get(0).equalsIgnoreCase(subject)
+                        && LocalDate.parse(columns.get(1)).equals(date)
+                        && readStartTime(columns).equals(startTime);
+                if (!matches) {
+                    keptSessions.add(line);
+                }
+            }
+        }
+        try (BufferedWriter writer = Files.newBufferedWriter(sessionsFile, StandardCharsets.UTF_8)) {
+            for (String line : keptSessions) {
+                writer.write(line);
+                writer.newLine();
+            }
+        }
+
+        // Delete all attendance records for this session
+        List<String> keptAttendance = new ArrayList<>();
+        try (BufferedReader reader = Files.newBufferedReader(attendanceFile, StandardCharsets.UTF_8)) {
+            String header = reader.readLine();
+            keptAttendance.add(header);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                List<String> columns = parseCsv(line);
+                boolean matches = columns.size() >= 5
+                        && columns.get(2).equalsIgnoreCase(subject)
+                        && LocalDate.parse(columns.get(3)).equals(date)
+                        && readAttendanceStartTime(columns).equals(startTime);
+                if (!matches) {
+                    keptAttendance.add(line);
+                }
+            }
+        }
+        try (BufferedWriter writer = Files.newBufferedWriter(attendanceFile, StandardCharsets.UTF_8)) {
+            for (String line : keptAttendance) {
+                writer.write(line);
+                writer.newLine();
+            }
+        }
+    }
 }

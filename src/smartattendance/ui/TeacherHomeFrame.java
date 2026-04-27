@@ -32,7 +32,7 @@ public class TeacherHomeFrame extends JFrame {
         this.onLogout = onLogout;
         
         setTitle("Teacher Dashboard");
-        setSize(800, 750);
+        setSize(800, 800);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
@@ -115,28 +115,14 @@ public class TeacherHomeFrame extends JFrame {
         JButton refreshBtn = new JButton("Refresh History");
         refreshBtn.addActionListener(e -> refreshHistory(sessionModel));
 
-        JButton deleteBtn = new JButton("Delete Attendance Record");
-        deleteBtn.setForeground(Color.RED);
-        deleteBtn.addActionListener(e -> {
-            int sessionRow = sessionTable.getSelectedRow();
-            int recordRow = recordTable.getSelectedRow();
-            if (sessionRow >= 0 && recordRow >= 0) {
-                String studentId = (String) recordModel.getValueAt(recordRow, 0);
-                String subject = (String) sessionModel.getValueAt(sessionRow, 1);
-                LocalDate date = LocalDate.parse(sessionModel.getValueAt(sessionRow, 0).toString());
-                String[] times = sessionModel.getValueAt(sessionRow, 3).toString().split("-");
-                LocalTime start = LocalTime.parse(times[0]);
-                LocalTime end = LocalTime.parse(times[1]);
-                
-                int confirm = JOptionPane.showConfirmDialog(this, "Remove attendance for " + studentId + "?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
-                if (confirm == JOptionPane.YES_OPTION) {
-                    try {
-                        store.removeAttendance(studentId, subject, date, start, end);
-                        showRecords(sessionTable, sessionModel, recordModel);
-                    } catch (Exception ex) { ex.printStackTrace(); }
-                }
-            }
-        });
+        JButton deleteRecordBtn = new JButton("Delete Attendance Record");
+        deleteRecordBtn.setForeground(Color.RED);
+        deleteRecordBtn.addActionListener(e -> deleteSelectedRecord(sessionTable, sessionModel, recordTable, recordModel));
+
+        JButton deleteSessionBtn = new JButton("Delete Whole Session");
+        deleteSessionBtn.setForeground(Color.RED);
+        deleteSessionBtn.setFont(new Font("Inter", Font.BOLD, 12));
+        deleteSessionBtn.addActionListener(e -> deleteSelectedSession(sessionTable, sessionModel, recordModel));
 
         sessionTable.getSelectionModel().addListSelectionListener(e -> showRecords(sessionTable, sessionModel, recordModel));
 
@@ -145,10 +131,54 @@ public class TeacherHomeFrame extends JFrame {
         
         panel.add(refreshBtn, BorderLayout.NORTH);
         panel.add(split, BorderLayout.CENTER);
-        panel.add(deleteBtn, BorderLayout.SOUTH);
+        
+        JPanel footerActions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        footerActions.add(deleteRecordBtn);
+        footerActions.add(deleteSessionBtn);
+        panel.add(footerActions, BorderLayout.SOUTH);
         
         refreshHistory(sessionModel);
         return panel;
+    }
+
+    private void deleteSelectedSession(JTable table, DefaultTableModel sessionModel, DefaultTableModel recordModel) {
+        int row = table.getSelectedRow();
+        if (row >= 0) {
+            String subject = (String) sessionModel.getValueAt(row, 1);
+            LocalDate date = LocalDate.parse(sessionModel.getValueAt(row, 0).toString());
+            String startTimeStr = sessionModel.getValueAt(row, 3).toString().split("-")[0];
+            LocalTime start = LocalTime.parse(startTimeStr);
+
+            int confirm = JOptionPane.showConfirmDialog(this, "DELETE ENTIRE SESSION for " + subject + "?\nAll attendance records will be lost!", "Confirm Delete Session", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (confirm == JOptionPane.YES_OPTION) {
+                try {
+                    store.deleteClassSession(subject, date, start);
+                    refreshHistory(sessionModel);
+                    recordModel.setRowCount(0);
+                } catch (Exception ex) { JOptionPane.showMessageDialog(this, "Error deleting session: " + ex.getMessage()); }
+            }
+        }
+    }
+
+    private void deleteSelectedRecord(JTable sessionTable, DefaultTableModel sessionModel, JTable recordTable, DefaultTableModel recordModel) {
+        int sessionRow = sessionTable.getSelectedRow();
+        int recordRow = recordTable.getSelectedRow();
+        if (sessionRow >= 0 && recordRow >= 0) {
+            String studentId = (String) recordModel.getValueAt(recordRow, 0);
+            String subject = (String) sessionModel.getValueAt(sessionRow, 1);
+            LocalDate date = LocalDate.parse(sessionModel.getValueAt(sessionRow, 0).toString());
+            String[] times = sessionModel.getValueAt(sessionRow, 3).toString().split("-");
+            LocalTime start = LocalTime.parse(times[0]);
+            LocalTime end = LocalTime.parse(times[1]);
+            
+            int confirm = JOptionPane.showConfirmDialog(this, "Remove attendance for " + studentId + "?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+            if (confirm == JOptionPane.YES_OPTION) {
+                try {
+                    store.removeAttendance(studentId, subject, date, start, end);
+                    showRecords(sessionTable, sessionModel, recordModel);
+                } catch (Exception ex) { ex.printStackTrace(); }
+            }
+        }
     }
 
     private void refreshHistory(DefaultTableModel model) {
@@ -184,15 +214,34 @@ public class TeacherHomeFrame extends JFrame {
 
     private void startSessionDialog() {
         try {
-            String className = JOptionPane.showInputDialog("Class Name (e.g. CS-2024):");
             String[] subjects = store.findAllSubjects().toArray(new String[0]);
-            if (subjects.length == 0) return;
-            String subject = (String) JOptionPane.showInputDialog(this, "Select Subject:", "Subject", 
-                JOptionPane.QUESTION_MESSAGE, null, subjects, subjects[0]);
-            String topic = JOptionPane.showInputDialog("Topic:");
+            if (subjects.length == 0) {
+                JOptionPane.showMessageDialog(this, "No subjects found. Ask Admin to add subjects.");
+                return;
+            }
 
-            if (className != null && subject != null) {
-                tokenService.startSession(className, subject, LocalTime.now(), LocalTime.now().plusHours(1), topic);
+            JComboBox<String> subjectCombo = new JComboBox<>(subjects);
+            JTextField classField = new JTextField();
+            JTextField topicField = new JTextField();
+
+            Object[] message = {
+                "Select Subject:", subjectCombo,
+                "Class Name (e.g. CS-2024):", classField,
+                "Topic (e.g. Java Basics):", topicField
+            };
+
+            int option = JOptionPane.showConfirmDialog(this, message, "Start New Session", JOptionPane.OK_CANCEL_OPTION);
+            
+            if (option == JOptionPane.OK_OPTION) {
+                String subject = (String) subjectCombo.getSelectedItem();
+                String className = classField.getText();
+                String topic = topicField.getText();
+
+                if (subject != null && !className.isBlank()) {
+                    tokenService.startSession(className, subject, LocalTime.now(), LocalTime.now().plusHours(1), topic);
+                } else {
+                    JOptionPane.showMessageDialog(this, "Subject and Class Name are required!");
+                }
             }
         } catch (Exception e) { e.printStackTrace(); }
     }
@@ -204,6 +253,7 @@ public class TeacherHomeFrame extends JFrame {
                     tokenService.getActiveClassName(), tokenService.getActiveStartTime(), 
                     tokenService.getActiveEndTime(), tokenService.getActiveTopic());
                 tokenService.stopSession();
+                JOptionPane.showMessageDialog(this, "Session stopped and saved.");
             } catch (Exception ex) { ex.printStackTrace(); }
         }
     }

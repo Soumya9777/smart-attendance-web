@@ -55,4 +55,6 @@ public interface AttendanceStore {
     List<ClassSession> findClassSessions(String subject) throws IOException;
 
     List<AttendanceRecord> findStudentAttendanceRecords(String studentId, String subject) throws IOException;
+
+    void deleteClassSession(String subject, LocalDate date, LocalTime startTime) throws IOException;
 }
