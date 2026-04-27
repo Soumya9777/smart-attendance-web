@@ -286,13 +286,14 @@ public class AttendanceServer {
         StringBuilder details = new StringBuilder();
         if (classSessions.isEmpty()) return "<p class=\"muted\">No logs.</p>";
 
+        java.time.format.DateTimeFormatter timeFmt = java.time.format.DateTimeFormatter.ofPattern("HH:mm");
         details.append("<div class=\"mini-date-list\">");
         for (int i = classSessions.size() - 1; i >= 0; i--) {
             ClassSession session = classSessions.get(i);
             boolean present = hasAttendanceForSession(presentRecords, session);
             details.append("<div class=\"log-item ").append(present ? "present" : "absent").append("\">")
                     .append("<div><b>").append(session.getDate()).append("</b><br>")
-                    .append("<small style=\"opacity:0.8\">").append(session.getStartTime()).append(" - ").append(session.getEndTime()).append("</small></div>")
+                    .append("<small style=\"opacity:0.8\">").append(session.getStartTime().format(timeFmt)).append(" - ").append(session.getEndTime().format(timeFmt)).append("</small></div>")
                     .append("<span>").append(present ? "✅ Present" : "❌ Absent").append("</span>")
                     .append("</div>");
         }
