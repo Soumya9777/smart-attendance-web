@@ -12,6 +12,9 @@ import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.Date;
+import java.util.Calendar;
 import java.util.List;
 
 public class TeacherHomeFrame extends JFrame {
@@ -223,13 +226,29 @@ public class TeacherHomeFrame extends JFrame {
             JComboBox<String> subjectCombo = new JComboBox<>(subjects);
             JTextField classField = new JTextField();
             JTextField topicField = new JTextField();
-            JTextField durationField = new JTextField("60"); // Default 60 mins
+            
+            // Time Spinners
+            Calendar cal = Calendar.getInstance();
+            Date now = cal.getTime();
+            
+            SpinnerDateModel startModel = new SpinnerDateModel(now, null, null, Calendar.MINUTE);
+            JSpinner startSpinner = new JSpinner(startModel);
+            JSpinner.DateEditor startEditor = new JSpinner.DateEditor(startSpinner, "HH:mm");
+            startSpinner.setEditor(startEditor);
+            
+            cal.add(Calendar.HOUR, 1);
+            Date hourLater = cal.getTime();
+            SpinnerDateModel endModel = new SpinnerDateModel(hourLater, null, null, Calendar.MINUTE);
+            JSpinner endSpinner = new JSpinner(endModel);
+            JSpinner.DateEditor endEditor = new JSpinner.DateEditor(endSpinner, "HH:mm");
+            endSpinner.setEditor(endEditor);
 
             Object[] message = {
                 "Select Subject:", subjectCombo,
-                "Class Name (e.g. CS-2024):", classField,
-                "Topic (e.g. Java Basics):", topicField,
-                "Duration (Minutes):", durationField
+                "Class Name:", classField,
+                "Topic:", topicField,
+                "Start Time:", startSpinner,
+                "End Time:", endSpinner
             };
 
             int option = JOptionPane.showConfirmDialog(this, message, "Start New Session", JOptionPane.OK_CANCEL_OPTION);
@@ -238,22 +257,21 @@ public class TeacherHomeFrame extends JFrame {
                 String subject = (String) subjectCombo.getSelectedItem();
                 String className = classField.getText();
                 String topic = topicField.getText();
-                int duration = 60;
-                try {
-                    duration = Integer.parseInt(durationField.getText());
-                } catch (NumberFormatException e) {
-                    JOptionPane.showMessageDialog(this, "Invalid duration. Using 60 minutes.");
-                }
+                
+                LocalTime start = toLocalTime((Date) startSpinner.getValue());
+                LocalTime end = toLocalTime((Date) endSpinner.getValue());
 
                 if (subject != null && !className.isBlank()) {
-                    LocalTime start = LocalTime.now();
-                    LocalTime end = start.plusMinutes(duration);
                     tokenService.startSession(className, subject, start, end, topic);
                 } else {
                     JOptionPane.showMessageDialog(this, "Subject and Class Name are required!");
                 }
             }
         } catch (Exception e) { e.printStackTrace(); }
+    }
+    
+    private LocalTime toLocalTime(Date date) {
+        return date.toInstant().atZone(ZoneId.systemDefault()).toLocalTime();
     }
 
     private void stopSession() {
