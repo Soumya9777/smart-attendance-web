@@ -57,4 +57,7 @@ public interface AttendanceStore {
     List<AttendanceRecord> findStudentAttendanceRecords(String studentId, String subject) throws IOException;
 
     void deleteClassSession(String subject, LocalDate date, LocalTime startTime) throws IOException;
+
+    void updateActiveToken(String tokenValue) throws IOException;
+    String getActiveToken() throws IOException;
 }

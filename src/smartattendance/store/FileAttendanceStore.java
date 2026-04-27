@@ -575,4 +575,14 @@ public class FileAttendanceStore implements AttendanceStore {
             }
         }
     }
+
+    @Override
+    public void updateActiveToken(String tokenValue) throws IOException {
+        // Not needed for local file mode
+    }
+
+    @Override
+    public String getActiveToken() throws IOException {
+        return null; // Not needed for local file mode
+    }
 }

@@ -272,7 +272,7 @@ public class TeacherHomeFrame extends JFrame {
             qrLabel.setIcon(new ImageIcon(QrCodeGenerator.createQrImage(qrUrl, 10, 1)));
         } else {
             infoLabel.setText("No Session Active");
-            statusLabel.setText("Ready");
+            statusLabel.setText("Local Server: " + serverUrl);
             qrLabel.setIcon(null);
             qrLabel.setText("START SESSION");
         }

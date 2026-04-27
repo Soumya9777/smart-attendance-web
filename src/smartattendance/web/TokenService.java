@@ -18,9 +18,14 @@ public class TokenService {
     private final SecureRandom random = new SecureRandom();
     private final List<TokenListener> listeners = new CopyOnWriteArrayList<>();
     private ScheduledExecutorService executorService;
+    private final smartattendance.store.AttendanceStore store;
     private volatile AttendanceToken currentToken = null;
     private volatile AttendanceToken previousToken = null;
-    private volatile AttendanceToken olderToken = null; // Extra buffer for 1s rotation
+    private volatile AttendanceToken olderToken = null;
+
+    public TokenService(smartattendance.store.AttendanceStore store) {
+        this.store = store;
+    }
     
     private volatile boolean sessionActive = false;
     private volatile String activeSubject = "";
@@ -46,15 +51,21 @@ public class TokenService {
     }
 
     public boolean isValid(String tokenValue) {
-        if (!sessionActive || tokenValue == null) return false;
+        if (tokenValue == null) return false;
         
         Instant now = Instant.now();
         
-        // Check current token
+        // 1. Check current memory token
         AttendanceToken curr = currentToken;
-        if (curr != null && curr.getValue().equals(tokenValue) && now.isBefore(curr.getExpiresAt().plusSeconds(1))) {
+        if (curr != null && curr.getValue().equals(tokenValue) && now.isBefore(curr.getExpiresAt().plusSeconds(2))) {
             return true;
         }
+
+        // 2. Check Database fallback (for Render server sync)
+        try {
+            String dbToken = store.getActiveToken();
+            if (tokenValue.equals(dbToken)) return true;
+        } catch (Exception e) { }
 
         // Check previous tokens (allows a small grace period for the 1s rotation lag)
         AttendanceToken prev = previousToken;
@@ -136,9 +147,22 @@ public class TokenService {
             olderToken = null;
             return;
         }
+
         olderToken = previousToken;
         previousToken = currentToken;
-        currentToken = newToken();
+        
+        byte[] bytes = new byte[12];
+        random.nextBytes(bytes);
+        String value = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        currentToken = new AttendanceToken(value, Instant.now());
+
+        // Sync token to Database so Render website can see it
+        try {
+            store.updateActiveToken(value);
+        } catch (Exception e) {
+            // Silently fail if local CSV mode or DB error
+        }
+
         for (TokenListener listener : listeners) {
             listener.onTokenChanged(currentToken);
         }

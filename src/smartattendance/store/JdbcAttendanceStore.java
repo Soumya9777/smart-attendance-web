@@ -32,38 +32,78 @@ public class JdbcAttendanceStore implements AttendanceStore {
     }
 
     @Override
+    public void updateActiveToken(String tokenValue) throws IOException {
+        try (Connection connection = connect();
+             PreparedStatement st = connection.prepareStatement("REPLACE INTO active_tokens (id, token_value) VALUES (1, ?)")) {
+            st.setString(1, tokenValue);
+            st.executeUpdate();
+        } catch (SQLException e) {
+            throw new IOException("Could not update active token", e);
+        }
+    }
+
+    @Override
+    public String getActiveToken() throws IOException {
+        try (Connection connection = connect();
+             PreparedStatement st = connection.prepareStatement("SELECT token_value FROM active_tokens WHERE id = 1");
+             ResultSet rs = st.executeQuery()) {
+            if (rs.next()) return rs.getString(1);
+        } catch (SQLException e) {
+            throw new IOException("Could not get active token", e);
+        }
+        return null;
+    }
+
+    @Override
     public void initialize() throws IOException {
         try (Connection connection = connect();
              Statement statement = connection.createStatement()) {
-            statement.executeUpdate("CREATE TABLE IF NOT EXISTS students ("
-                    + "id VARCHAR(30) PRIMARY KEY, name VARCHAR(100) NOT NULL, password VARCHAR(100) NOT NULL)");
-            statement.executeUpdate("CREATE TABLE IF NOT EXISTS admins ("
-                    + "id VARCHAR(30) PRIMARY KEY, name VARCHAR(100) NOT NULL, password VARCHAR(100) NOT NULL)");
-            statement.executeUpdate("CREATE TABLE IF NOT EXISTS teachers ("
-                    + "id VARCHAR(30) PRIMARY KEY, name VARCHAR(100) NOT NULL, password VARCHAR(100) NOT NULL)");
-            statement.executeUpdate("CREATE TABLE IF NOT EXISTS subjects (subject VARCHAR(100) PRIMARY KEY)");
-            statement.executeUpdate("CREATE TABLE IF NOT EXISTS class_sessions ("
-                    + "subject VARCHAR(100) NOT NULL, attendance_date VARCHAR(20) NOT NULL, "
-                    + "class_name VARCHAR(100), start_time VARCHAR(10), end_time VARCHAR(10), "
-                    + "duration_minutes INTEGER, topic VARCHAR(200), "
-                    + "PRIMARY KEY (subject, attendance_date, start_time, end_time))");
-            statement.executeUpdate("CREATE TABLE IF NOT EXISTS attendance ("
-                    + "student_id VARCHAR(30) NOT NULL, student_name VARCHAR(100) NOT NULL, "
-                    + "subject VARCHAR(100) NOT NULL, "
-                    + "attendance_date VARCHAR(20) NOT NULL, start_time VARCHAR(10), end_time VARCHAR(10), "
-                    + "marked_at VARCHAR(40) NOT NULL, "
-                    + "PRIMARY KEY (student_id, subject, attendance_date, start_time, end_time))");
+            statement.execute("CREATE TABLE IF NOT EXISTS students (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), password VARCHAR(100))");
+            statement.execute("CREATE TABLE IF NOT EXISTS teachers (id VARCHAR(50) PRIMARY KEY, name VARCHAR(100), password VARCHAR(100))");
+            statement.execute("CREATE TABLE IF NOT EXISTS subjects (name VARCHAR(100) PRIMARY KEY)");
+            statement.execute("CREATE TABLE IF NOT EXISTS class_sessions (subject VARCHAR(100), attendance_date DATE, class_name VARCHAR(100), start_time TIME, end_time TIME, duration INT, topic VARCHAR(255))");
+            statement.execute("CREATE TABLE IF NOT EXISTS attendance (student_id VARCHAR(50), student_name VARCHAR(100), subject VARCHAR(100), attendance_date DATE, start_time TIME, end_time TIME, marked_at DATETIME)");
+            statement.execute("CREATE TABLE IF NOT EXISTS active_tokens (id INT PRIMARY KEY, token_value VARCHAR(50))");
             
-            // Check if default admin exists
-            try (PreparedStatement check = connection.prepareStatement("SELECT id FROM admins WHERE id = 'ADM001'")) {
-                if (!check.executeQuery().next()) {
-                    try (PreparedStatement insert = connection.prepareStatement("INSERT INTO admins(id, name, password) VALUES ('ADM001', 'Soumya', 'soumyar@njan')")) {
-                        insert.executeUpdate();
-                    }
+            // Check for default admin
+            try (ResultSet rs = statement.executeQuery("SELECT * FROM teachers WHERE id = 'ADM001'")) {
+                if (!rs.next()) {
+                    statement.execute("INSERT INTO teachers (id, name, password) VALUES ('ADM001', 'Admin', 'soumyar@njan')");
                 }
             }
         } catch (SQLException exception) {
-            throw new IOException("Could not initialize JDBC database", exception);
+            throw new IOException("Could not initialize database", exception);
+        }
+    }
+
+    @Override
+    public void deleteClassSession(String subject, LocalDate date, LocalTime startTime) throws IOException {
+        try (Connection connection = connect()) {
+            connection.setAutoCommit(false);
+            try {
+                // Delete attendance records first
+                try (PreparedStatement st = connection.prepareStatement(
+                        "DELETE FROM attendance WHERE UPPER(subject) = UPPER(?) AND attendance_date = ? AND start_time = ?")) {
+                    st.setString(1, subject);
+                    st.setString(2, date.toString());
+                    st.setString(3, startTime.toString());
+                    st.executeUpdate();
+                }
+                // Delete session record
+                try (PreparedStatement st = connection.prepareStatement(
+                        "DELETE FROM class_sessions WHERE UPPER(subject) = UPPER(?) AND attendance_date = ? AND start_time = ?")) {
+                    st.setString(1, subject);
+                    st.setString(2, date.toString());
+                    st.setString(3, startTime.toString());
+                    st.executeUpdate();
+                }
+                connection.commit();
+            } catch (SQLException e) {
+                connection.rollback();
+                throw e;
+            }
+        } catch (SQLException exception) {
+            throw new IOException("Could not delete class session", exception);
         }
     }
 
@@ -426,37 +466,6 @@ public class JdbcAttendanceStore implements AttendanceStore {
             throw new IOException("Could not read student attendance records", exception);
         }
         return records;
-    }
-
-    @Override
-    public void deleteClassSession(String subject, LocalDate date, LocalTime startTime) throws IOException {
-        try (Connection connection = connect()) {
-            connection.setAutoCommit(false);
-            try {
-                // Delete attendance records first
-                try (PreparedStatement st = connection.prepareStatement(
-                        "DELETE FROM attendance WHERE UPPER(subject) = UPPER(?) AND attendance_date = ? AND start_time = ?")) {
-                    st.setString(1, subject);
-                    st.setString(2, date.toString());
-                    st.setString(3, startTime.toString());
-                    st.executeUpdate();
-                }
-                // Delete session record
-                try (PreparedStatement st = connection.prepareStatement(
-                        "DELETE FROM class_sessions WHERE UPPER(subject) = UPPER(?) AND attendance_date = ? AND start_time = ?")) {
-                    st.setString(1, subject);
-                    st.setString(2, date.toString());
-                    st.setString(3, startTime.toString());
-                    st.executeUpdate();
-                }
-                connection.commit();
-            } catch (SQLException e) {
-                connection.rollback();
-                throw e;
-            }
-        } catch (SQLException exception) {
-            throw new IOException("Could not delete class session", exception);
-        }
     }
 
     private Connection connect() throws SQLException {

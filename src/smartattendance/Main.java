@@ -27,7 +27,7 @@ public final class Main {
         }
         store.initialize();
 
-        tokenService = new TokenService();
+        tokenService = new TokenService(store);
         server = new AttendanceServer(8080, store, tokenService);
         server.start();
         tokenService.start();
