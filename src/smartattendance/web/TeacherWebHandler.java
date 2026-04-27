@@ -107,13 +107,13 @@ public class TeacherWebHandler {
                     .append("<h2>").append(AttendanceServer.escape(tokenService.getActiveSubject())).append("</h2>")
                     .append("<p>").append(AttendanceServer.escape(tokenService.getActiveClassName())).append(" | ").append(AttendanceServer.escape(tokenService.getActiveTopic())).append("</p>")
                     
-                    .append("<div id=\"qr-container\" style=\"margin:20px auto; width:300px; height:300px; background:#f5f5f5; border-radius:12px; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--line);\">")
-                    .append("<div id=\"qr-grid\" style=\"display:grid; grid-template-columns:repeat(25, 1fr); width:280px; height:280px; gap:0;\"><p style='grid-column:1/-1; align-self:center;'>Generating QR...</p></div>")
+                    .append("<div id=\"qr-container\" style=\"margin:20px auto; width:300px; height:300px; background:#fff; border-radius:12px; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--line);\">")
+                    .append("<div id=\"qr-grid\" style=\"display:grid; width:280px; height:280px; gap:0;\"><p style='align-self:center;'>Generating QR...</p></div>")
                     .append("</div>")
                     .append("<p class=\"muted\">Scanning QR Code... (Updates every 5s)</p>")
                     
                     .append("<form method=\"post\" action=\"/teacher-stop-session\" style=\"margin-top:20px;\">")
-                    .append("<button type=\"submit\" class=\"danger\">Stop Session & Finalize</button>")
+                    .append("<button type=\"submit\" style=\"background:#dc2626;\">Stop Session & Finalize</button>")
                     .append("</form>")
                     .append("</div>");
 
@@ -144,11 +144,13 @@ public class TeacherWebHandler {
                     .append("function updateQR() {")
                     .append("  fetch('/teacher-qr').then(r => r.json()).then(data => {")
                     .append("    const grid = document.getElementById('qr-grid');")
+                    .append("    if (!data || data.length === 0) return;")
                     .append("    grid.innerHTML = '';")
+                    .append("    grid.style.gridTemplateColumns = `repeat(${data.length}, 1fr) `;")
                     .append("    data.forEach(row => {")
                     .append("      row.forEach(cell => {")
                     .append("        const div = document.createElement('div');")
-                    .append("        div.style.backgroundColor = cell ? 'var(--text)' : 'transparent';")
+                    .append("        div.style.backgroundColor = cell ? 'var(--dark)' : 'transparent';")
                     .append("        grid.appendChild(div);")
                     .append("      });")
                     .append("    });")
