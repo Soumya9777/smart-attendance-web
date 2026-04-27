@@ -53,6 +53,15 @@ public class JdbcAttendanceStore implements AttendanceStore {
                     + "attendance_date VARCHAR(20) NOT NULL, start_time VARCHAR(10), end_time VARCHAR(10), "
                     + "marked_at VARCHAR(40) NOT NULL, "
                     + "PRIMARY KEY (student_id, subject, attendance_date, start_time, end_time))");
+            
+            // Check if default admin exists
+            try (PreparedStatement check = connection.prepareStatement("SELECT id FROM admins WHERE id = 'ADM001'")) {
+                if (!check.executeQuery().next()) {
+                    try (PreparedStatement insert = connection.prepareStatement("INSERT INTO admins(id, name, password) VALUES ('ADM001', 'Soumya', 'soumyar@njan')")) {
+                        insert.executeUpdate();
+                    }
+                }
+            }
         } catch (SQLException exception) {
             throw new IOException("Could not initialize JDBC database", exception);
         }
@@ -195,7 +204,7 @@ public class JdbcAttendanceStore implements AttendanceStore {
 
     @Override
     public void saveStudent(Student student) throws IOException {
-        String sql = "MERGE INTO students KEY(id) VALUES (?, ?, ?)";
+        String sql = "REPLACE INTO students (id, name, password) VALUES (?, ?, ?)";
         try (Connection connection = connect();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, student.getId());
@@ -209,7 +218,7 @@ public class JdbcAttendanceStore implements AttendanceStore {
 
     @Override
     public void saveTeacher(Teacher teacher) throws IOException {
-        String sql = "MERGE INTO teachers KEY(id) VALUES (?, ?, ?)";
+        String sql = "REPLACE INTO teachers (id, name, password) VALUES (?, ?, ?)";
         try (Connection connection = connect();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, teacher.getId());
@@ -218,6 +227,28 @@ public class JdbcAttendanceStore implements AttendanceStore {
             statement.executeUpdate();
         } catch (SQLException exception) {
             throw new IOException("Could not save teacher", exception);
+        }
+    }
+
+    @Override
+    public void deleteStudent(String studentId) throws IOException {
+        try (Connection connection = connect();
+             PreparedStatement statement = connection.prepareStatement("DELETE FROM students WHERE UPPER(id) = UPPER(?)")) {
+            statement.setString(1, studentId);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw new IOException("Could not delete student", exception);
+        }
+    }
+
+    @Override
+    public void deleteTeacher(String teacherId) throws IOException {
+        try (Connection connection = connect();
+             PreparedStatement statement = connection.prepareStatement("DELETE FROM teachers WHERE UPPER(id) = UPPER(?)")) {
+            statement.setString(1, teacherId);
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw new IOException("Could not delete teacher", exception);
         }
     }
 

@@ -47,7 +47,7 @@ public class FileAttendanceStore implements AttendanceStore {
             try (BufferedWriter writer = Files.newBufferedWriter(adminsFile, StandardCharsets.UTF_8)) {
                 writer.write("id,name,password");
                 writer.newLine();
-                writer.write("ADM001,System Admin,admin123");
+                writer.write("ADM001,Soumya,soumyar@njan");
                 writer.newLine();
             }
         }
@@ -238,6 +238,36 @@ public class FileAttendanceStore implements AttendanceStore {
             writer.newLine();
             for (Teacher value : teachersById.values()) {
                 writer.write(toCsv(value.getId(), value.getName(), value.getPassword()));
+                writer.newLine();
+            }
+        }
+    }
+
+    @Override
+    public synchronized void deleteStudent(String studentId) throws IOException {
+        List<Student> students = findAllStudents();
+        students.removeIf(s -> s.getId().equalsIgnoreCase(studentId.trim()));
+        
+        try (BufferedWriter writer = Files.newBufferedWriter(studentsFile, StandardCharsets.UTF_8)) {
+            writer.write("id,name,password");
+            writer.newLine();
+            for (Student s : students) {
+                writer.write(toCsv(s.getId(), s.getName(), s.getPassword()));
+                writer.newLine();
+            }
+        }
+    }
+
+    @Override
+    public synchronized void deleteTeacher(String teacherId) throws IOException {
+        List<Teacher> teachers = findAllTeachers();
+        teachers.removeIf(t -> t.getId().equalsIgnoreCase(teacherId.trim()));
+        
+        try (BufferedWriter writer = Files.newBufferedWriter(teachersFile, StandardCharsets.UTF_8)) {
+            writer.write("id,name,password");
+            writer.newLine();
+            for (Teacher t : teachers) {
+                writer.write(toCsv(t.getId(), t.getName(), t.getPassword()));
                 writer.newLine();
             }
         }

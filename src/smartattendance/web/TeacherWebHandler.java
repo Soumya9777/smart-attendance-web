@@ -2,15 +2,19 @@ package smartattendance.web;
 
 import com.sun.net.httpserver.HttpExchange;
 import smartattendance.model.Teacher;
+import smartattendance.model.AttendanceRecord;
 import smartattendance.store.AttendanceStore;
 import smartattendance.qr.QrCodeGenerator;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 public class TeacherWebHandler {
     private final AttendanceStore store;
@@ -70,28 +74,56 @@ public class TeacherWebHandler {
         }
         Teacher teacher = optionalTeacher.get();
 
+        String activeSub = tokenService.getActiveSubject();
+        List<AttendanceRecord> todayRecords = store.findAttendanceByDate(LocalDate.now(), activeSub);
+        
+        StringBuilder attendanceRows = new StringBuilder();
+        for (AttendanceRecord r : todayRecords) {
+            if (r.getStartTime().equals(tokenService.getActiveStartTime())) {
+                attendanceRows.append("<tr><td>").append(AttendanceServer.escape(r.getStudentId()))
+                        .append("</td><td>").append(AttendanceServer.escape(r.getStudentName()))
+                        .append("</td><td>").append(r.getMarkedAt().toLocalTime().toString().substring(0, 8))
+                        .append("</td><td class=\"success\">Present</td></tr>");
+            }
+        }
+        if (attendanceRows.length() == 0) {
+            attendanceRows.append("<tr><td colspan=\"4\" class=\"muted\">No students have marked attendance for this session yet.</td></tr>");
+        }
+
+        StringBuilder subjectOptions = new StringBuilder();
+        for (String sub : store.findAllSubjects()) {
+            subjectOptions.append("<option value=\"").append(AttendanceServer.escape(sub))
+                    .append("\"").append(sub.equals(activeSub) ? " selected" : "").append(">")
+                    .append(AttendanceServer.escape(sub)).append("</option>");
+        }
+
         String body = "<div class=\"eyebrow\">Teacher Dashboard</div>"
                 + "<h1>Welcome, " + AttendanceServer.escape(teacher.getName()) + "</h1>"
                 + "<p><a class=\"button-link secondary\" href=\"/teacher-logout\">Logout</a></p>"
                 + "<div class=\"action-panel\">"
-                + "<div><strong>Current Session: " + AttendanceServer.escape(tokenService.getActiveSubject()) + "</strong>"
+                + "<div><strong>Current Session: " + AttendanceServer.escape(activeSub) + "</strong>"
                 + "<span>Class: " + AttendanceServer.escape(tokenService.getActiveClassName()) + " | "
                 + tokenService.getActiveStartTime() + " to " + tokenService.getActiveEndTime() + "</span></div>"
+                + "<a href=\"/teacher-export\" class=\"button-link\">Download CSV Report</a>"
                 + "</div>"
                 + "<div style=\"display:flex; gap:20px; flex-wrap:wrap;\">"
                 + "<div style=\"flex:1; min-width:300px;\"><h2>Start New Session</h2>"
                 + "<form method=\"post\" action=\"/teacher-start-session\">"
-                + "<label>Class Name<input name=\"className\" required placeholder=\"e.g., Year 2 CS\"></label>"
-                + "<label>Subject<input name=\"subject\" required placeholder=\"e.g., Core Java\"></label>"
-                + "<label>Topic<input name=\"topic\" required placeholder=\"e.g., Polymorphism\"></label>"
-                + "<div style=\"display:flex;gap:10px;\"><label style=\"flex:1\">Start Time<input type=\"time\" name=\"startTime\" required value=\"09:00\"></label>"
-                + "<label style=\"flex:1\">End Time<input type=\"time\" name=\"endTime\" required value=\"10:00\"></label></div>"
+                + "<label>Class Name<input name=\"className\" required value=\"" + AttendanceServer.escape(tokenService.getActiveClassName()) + "\"></label>"
+                + "<label>Subject<select name=\"subject\" required style=\"width:100%; padding:14px; border-radius:12px; border:1px solid #d1d5db; background:#f9fafb; font-size:16px;\">" + subjectOptions + "</select></label>"
+                + "<label>Topic<input name=\"topic\" required value=\"" + AttendanceServer.escape(tokenService.getActiveTopic()) + "\"></label>"
+                + "<div style=\"display:flex;gap:10px;\"><label style=\"flex:1\">Start Time<input type=\"time\" name=\"startTime\" required value=\"" + tokenService.getActiveStartTime() + "\"></label>"
+                + "<label style=\"flex:1\">End Time<input type=\"time\" name=\"endTime\" required value=\"" + tokenService.getActiveEndTime() + "\"></label></div>"
                 + "<button type=\"submit\">Start QR Session</button>"
                 + "</form></div>"
                 + "<div style=\"flex:1; min-width:300px;\"><h2>Live QR Code</h2>"
                 + "<p class=\"muted\">Students scan this code. It refreshes every " + TokenService.REFRESH_SECONDS + " seconds.</p>"
                 + "<iframe src=\"/teacher-qr\" style=\"width:100%; height:320px; border:1px solid var(--line); border-radius:12px; background:white;\"></iframe>"
-                + "</div></div>";
+                + "</div>"
+                + "</div>"
+                + "<h2>Attendance for Current Session</h2>"
+                + "<table><thead><tr><th>Student ID</th><th>Name</th><th>Marked At</th><th>Status</th></tr></thead>"
+                + "<tbody>" + attendanceRows + "</tbody></table>";
 
         AttendanceServer.sendHtml(exchange, 200, AttendanceServer.page("Teacher Dashboard", body));
     }
@@ -152,6 +184,38 @@ public class TeacherWebHandler {
         html.append("</div></body></html>");
 
         AttendanceServer.sendHtml(exchange, 200, html.toString());
+    }
+
+    public void handleExport(HttpExchange exchange) throws IOException {
+        if (currentTeacher(exchange).isEmpty()) {
+            AttendanceServer.redirect(exchange, "/teacher-login");
+            return;
+        }
+
+        String subject = tokenService.getActiveSubject();
+        List<AttendanceRecord> records = store.findAttendanceByDate(LocalDate.now(), subject);
+        
+        StringBuilder csv = new StringBuilder();
+        csv.append("Student ID,Student Name,Subject,Date,Start Time,End Time,Marked At\n");
+        for (AttendanceRecord r : records) {
+            if (r.getStartTime().equals(tokenService.getActiveStartTime())) {
+                csv.append(r.getStudentId()).append(",")
+                   .append(r.getStudentName()).append(",")
+                   .append(r.getSubject()).append(",")
+                   .append(r.getAttendanceDate()).append(",")
+                   .append(r.getStartTime()).append(",")
+                   .append(r.getEndTime()).append(",")
+                   .append(r.getMarkedAt()).append("\n");
+            }
+        }
+
+        byte[] bytes = csv.toString().getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "text/csv");
+        exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=attendance_" + subject + "_" + LocalDate.now() + ".csv");
+        exchange.sendResponseHeaders(200, bytes.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(bytes);
+        }
     }
 
     private Optional<Teacher> currentTeacher(HttpExchange exchange) throws IOException {

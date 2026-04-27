@@ -1,6 +1,8 @@
 package smartattendance;
 
+import smartattendance.store.AttendanceStore;
 import smartattendance.store.FileAttendanceStore;
+import smartattendance.store.JdbcAttendanceStore;
 import smartattendance.web.AttendanceServer;
 import smartattendance.web.TokenService;
 
@@ -11,10 +13,28 @@ public final class Main {
     }
 
     public static void main(String[] args) throws Exception {
-        System.out.println("Starting Smart Attendance headless server...");
+        System.out.println("Starting Smart Attendance Management System...");
 
-        Path dataDirectory = Path.of("data");
-        FileAttendanceStore store = new FileAttendanceStore(dataDirectory);
+        AttendanceStore store;
+        String dbUrl = System.getenv("DB_URL");
+        if (dbUrl != null && !dbUrl.isBlank()) {
+            System.out.println("Connecting to database: " + dbUrl);
+            String dbUser = System.getenv("DB_USER");
+            String dbPass = System.getenv("DB_PASS");
+            
+            // Register MySQL Driver
+            try {
+                Class.forName("com.mysql.cj.jdbc.Driver");
+            } catch (ClassNotFoundException e) {
+                System.err.println("Warning: MySQL JDBC Driver not found in classpath.");
+            }
+            
+            store = new JdbcAttendanceStore(dbUrl, dbUser, dbPass);
+        } else {
+            System.out.println("Using file-based storage (CSV). Set DB_URL to switch to MySQL.");
+            store = new FileAttendanceStore(Path.of("data"));
+        }
+        
         store.initialize();
 
         TokenService tokenService = new TokenService();

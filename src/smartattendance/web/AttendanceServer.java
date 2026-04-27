@@ -60,18 +60,22 @@ public class AttendanceServer {
         server.createContext("/scan", this::handleScan);
 
         TeacherWebHandler teacherHandler = new TeacherWebHandler(store, tokenService);
-        server.createContext("/teacher-login", teacherHandler::handleLogin);
-        server.createContext("/teacher-logout", teacherHandler::handleLogout);
-        server.createContext("/teacher-dashboard", teacherHandler::handleDashboard);
-        server.createContext("/teacher-start-session", teacherHandler::handleStartSession);
-        server.createContext("/teacher-qr", teacherHandler::handleQr);
-
         AdminWebHandler adminHandler = new AdminWebHandler(store);
+
         server.createContext("/admin-login", adminHandler::handleLogin);
         server.createContext("/admin-logout", adminHandler::handleLogout);
         server.createContext("/admin-dashboard", adminHandler::handleDashboard);
         server.createContext("/admin-add-teacher", adminHandler::handleAddTeacher);
         server.createContext("/admin-add-student", adminHandler::handleAddStudent);
+        server.createContext("/admin-add-subject", adminHandler::handleAddSubject);
+        server.createContext("/admin-delete-user", adminHandler::handleDeleteUser);
+        
+        server.createContext("/teacher-login", teacherHandler::handleLogin);
+        server.createContext("/teacher-logout", teacherHandler::handleLogout);
+        server.createContext("/teacher-dashboard", teacherHandler::handleDashboard);
+        server.createContext("/teacher-start-session", teacherHandler::handleStartSession);
+        server.createContext("/teacher-qr", teacherHandler::handleQr);
+        server.createContext("/teacher-export", teacherHandler::handleExport);
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
         server.start();
         baseUrl = (secure ? "https://" : "http://") + localAddress + ":" + port;

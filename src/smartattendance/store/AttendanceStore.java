@@ -35,6 +35,10 @@ public interface AttendanceStore {
 
     void saveTeacher(Teacher teacher) throws IOException;
 
+    void deleteStudent(String studentId) throws IOException;
+
+    void deleteTeacher(String teacherId) throws IOException;
+
     void recordClassSession(String subject, LocalDate date, String className, LocalTime startTime,
                             LocalTime endTime, String topic) throws IOException;
 
