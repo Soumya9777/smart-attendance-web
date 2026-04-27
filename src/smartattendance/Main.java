@@ -57,6 +57,15 @@ public final class Main {
         }));
 
         System.out.println("Server is running on " + server.getBaseUrl());
-        System.out.println("Press Ctrl+C to stop.");
+
+        // Launch GUI if not headless (on your Mac)
+        if (!java.awt.GraphicsEnvironment.isHeadless()) {
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                new smartattendance.ui.TeacherHomeFrame(tokenService).setVisible(true);
+                System.out.println("Desktop GUI launched successfully.");
+            });
+        }
+
+        System.out.println("Press Ctrl+C to stop the server.");
     }
 }
