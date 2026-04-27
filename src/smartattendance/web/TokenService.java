@@ -17,13 +17,15 @@ public class TokenService {
     private final SecureRandom random = new SecureRandom();
     private final List<TokenListener> listeners = new CopyOnWriteArrayList<>();
     private ScheduledExecutorService executorService;
-    private volatile AttendanceToken currentToken = newToken();
-    private volatile String activeSubject = "Core Java";
-    private volatile String activeClassName = "Default Class";
-    private volatile String activeTopic = "Class topic";
-    private volatile int activeDurationMinutes = 60;
-    private volatile LocalTime activeStartTime = LocalTime.of(9, 0);
-    private volatile LocalTime activeEndTime = LocalTime.of(10, 0);
+    private volatile AttendanceToken currentToken = null;
+    
+    private volatile boolean sessionActive = false;
+    private volatile String activeSubject = "";
+    private volatile String activeClassName = "";
+    private volatile String activeTopic = "";
+    private volatile int activeDurationMinutes = 0;
+    private volatile LocalTime activeStartTime = null;
+    private volatile LocalTime activeEndTime = null;
 
     public void start() {
         executorService = Executors.newSingleThreadScheduledExecutor();
@@ -42,7 +44,12 @@ public class TokenService {
 
     public boolean isValid(String tokenValue) {
         AttendanceToken token = currentToken;
+        if (token == null || !sessionActive) return false;
         return token.getValue().equals(tokenValue) && Instant.now().isBefore(token.getExpiresAt());
+    }
+
+    public boolean isSessionActive() {
+        return sessionActive;
     }
 
     public String getActiveSubject() {
@@ -69,8 +76,13 @@ public class TokenService {
         return activeEndTime;
     }
 
-    public void setActiveSession(String activeClassName, String activeSubject, LocalTime activeStartTime,
-                                 LocalTime activeEndTime, String activeTopic) {
+    public void stopSession() {
+        this.sessionActive = false;
+        this.currentToken = null;
+    }
+
+    public void startSession(String activeClassName, String activeSubject, LocalTime activeStartTime,
+                                  LocalTime activeEndTime, String activeTopic) {
         if (activeClassName == null || activeClassName.isBlank()) {
             throw new IllegalArgumentException("Class cannot be empty");
         }
@@ -87,6 +99,7 @@ public class TokenService {
         this.activeEndTime = activeEndTime;
         this.activeTopic = activeTopic == null || activeTopic.isBlank() ? "Not specified" : activeTopic.trim();
         this.activeDurationMinutes = activeDurationMinutes;
+        this.sessionActive = true;
         rotateToken();
     }
 
@@ -99,10 +112,16 @@ public class TokenService {
 
     public void addListener(TokenListener listener) {
         listeners.add(listener);
-        listener.onTokenChanged(currentToken);
+        if (currentToken != null) {
+            listener.onTokenChanged(currentToken);
+        }
     }
 
     private void rotateToken() {
+        if (!sessionActive) {
+            currentToken = null;
+            return;
+        }
         currentToken = newToken();
         for (TokenListener listener : listeners) {
             listener.onTokenChanged(currentToken);

@@ -74,144 +74,179 @@ public class TeacherWebHandler {
         }
         Teacher teacher = optionalTeacher.get();
 
-        String activeSub = tokenService.getActiveSubject();
-        List<AttendanceRecord> todayRecords = store.findAttendanceByDate(LocalDate.now(), activeSub);
-        
-        StringBuilder attendanceRows = new StringBuilder();
-        for (AttendanceRecord r : todayRecords) {
-            if (r.getStartTime().equals(tokenService.getActiveStartTime())) {
-                attendanceRows.append("<tr><td>").append(AttendanceServer.escape(r.getStudentId()))
-                        .append("</td><td>").append(AttendanceServer.escape(r.getStudentName()))
-                        .append("</td><td>").append(r.getMarkedAt().toLocalTime().toString().substring(0, 8))
-                        .append("</td><td class=\"success\">Present</td></tr>");
+        StringBuilder content = new StringBuilder();
+        content.append("<div class=\"eyebrow\">Teacher Portal</div>");
+        content.append("<h1>Welcome, ").append(AttendanceServer.escape(teacher.getName())).append("</h1>");
+        content.append("<p><a class=\"button-link secondary\" href=\"/teacher-logout\">Logout</a></p>");
+
+        if (!tokenService.isSessionActive()) {
+            // Show Start Session Form
+            StringBuilder subjectOptions = new StringBuilder();
+            for (String sub : store.findAllSubjects()) {
+                subjectOptions.append("<option value=\"").append(AttendanceServer.escape(sub)).append("\">")
+                        .append(AttendanceServer.escape(sub)).append("</option>");
             }
-        }
-        if (attendanceRows.length() == 0) {
-            attendanceRows.append("<tr><td colspan=\"4\" class=\"muted\">No students have marked attendance for this session yet.</td></tr>");
+
+            content.append("<div class=\"action-panel\">")
+                    .append("<h2>Start New Attendance Session</h2>")
+                    .append("<form method=\"post\" action=\"/teacher-start-session\">")
+                    .append("<label>Class Name (e.g. CS-2024)<input name=\"className\" required></label>")
+                    .append("<label>Subject<select name=\"subject\">").append(subjectOptions).append("</select></label>")
+                    .append("<label>Topic<input name=\"topic\" placeholder=\"Current lesson topic\"></label>")
+                    .append("<div style=\"display:flex; gap:20px;\">")
+                    .append("<label style=\"flex:1;\">Start Time<input type=\"time\" name=\"startTime\" value=\"").append(LocalTime.now().toString().substring(0, 5)).append("\" required></label>")
+                    .append("<label style=\"flex:1;\">End Time<input type=\"time\" name=\"endTime\" value=\"").append(LocalTime.now().plusHours(1).toString().substring(0, 5)).append("\" required></label>")
+                    .append("</div>")
+                    .append("<button type=\"submit\" style=\"margin-top:20px;\">Start Session & Show QR</button>")
+                    .append("</form></div>");
+        } else {
+            // Show Active Session Info and QR
+            content.append("<div style=\"display:flex; gap:30px; flex-wrap:wrap;\">")
+                    .append("<div style=\"flex:1; min-width:300px; text-align:center;\">")
+                    .append("<div class=\"status present\" style=\"display:inline-block; margin-bottom:10px;\">SESSION ACTIVE</div>")
+                    .append("<h2>").append(AttendanceServer.escape(tokenService.getActiveSubject())).append("</h2>")
+                    .append("<p>").append(AttendanceServer.escape(tokenService.getActiveClassName())).append(" | ").append(AttendanceServer.escape(tokenService.getActiveTopic())).append("</p>")
+                    
+                    .append("<div id=\"qr-container\" style=\"margin:20px auto; width:300px; height:300px; background:#f5f5f5; border-radius:12px; display:flex; align-items:center; justify-content:center; overflow:hidden; border:1px solid var(--line);\">")
+                    .append("<div id=\"qr-grid\" style=\"display:grid; grid-template-columns:repeat(25, 1fr); width:280px; height:280px; gap:0;\"></div>")
+                    .append("</div>")
+                    .append("<p class=\"muted\">Scanning QR Code... (Updates every 5s)</p>")
+                    
+                    .append("<form method=\"post\" action=\"/teacher-stop-session\" style=\"margin-top:20px;\">")
+                    .append("<button type=\"submit\" class=\"danger\">Stop Session & Finalize</button>")
+                    .append("</form>")
+                    .append("</div>");
+
+            // Attendance List
+            List<AttendanceRecord> todayRecords = store.findAttendanceByDate(LocalDate.now(), tokenService.getActiveSubject());
+            StringBuilder rows = new StringBuilder();
+            int count = 0;
+            for (AttendanceRecord r : todayRecords) {
+                if (r.getStartTime().equals(tokenService.getActiveStartTime())) {
+                    count++;
+                    rows.append("<tr><td>").append(AttendanceServer.escape(r.getStudentId()))
+                            .append("</td><td>").append(AttendanceServer.escape(r.getStudentName()))
+                            .append("</td><td>").append(r.getMarkedAt().toLocalTime().toString().substring(0, 8))
+                            .append("</td><td class=\"success\">Present</td></tr>");
+                }
+            }
+            if (count == 0) rows.append("<tr><td colspan=\"4\" class=\"muted\">No students scanned yet.</td></tr>");
+
+            content.append("<div style=\"flex:1.5; min-width:300px;\">")
+                    .append("<div style=\"display:flex; justify-content:space-between; align-items:center;\">")
+                    .append("<h3>Live Attendance (").append(count).append(")</h3>")
+                    .append("<a href=\"/teacher-export\" class=\"button-link secondary\" style=\"font-size:14px; padding:8px 15px;\">Download CSV</a>")
+                    .append("</div>")
+                    .append("<table><thead><tr><th>ID</th><th>Name</th><th>Time</th><th>Status</th></tr></thead><tbody>").append(rows).append("</tbody></table>")
+                    .append("</div></div>");
+
+            content.append("<script>")
+                    .append("function updateQR() {")
+                    .append("  fetch('/teacher-qr').then(r => r.json()).then(data => {")
+                    .append("    const grid = document.getElementById('qr-grid');")
+                    .append("    grid.innerHTML = '';")
+                    .append("    data.forEach(row => {")
+                    .append("      row.forEach(cell => {")
+                    .append("        const div = document.createElement('div');")
+                    .append("        div.style.backgroundColor = cell ? 'var(--text)' : 'transparent';")
+                    .append("        grid.appendChild(div);")
+                    .append("      });")
+                    .append("    });")
+                    .append("  });")
+                    .append("}")
+                    .append("updateQR(); setInterval(updateQR, 5000);")
+                    .append("setInterval(() => location.reload(), 30000);") // Refresh list every 30s
+                    .append("</script>");
         }
 
-        StringBuilder subjectOptions = new StringBuilder();
-        for (String sub : store.findAllSubjects()) {
-            subjectOptions.append("<option value=\"").append(AttendanceServer.escape(sub))
-                    .append("\"").append(sub.equals(activeSub) ? " selected" : "").append(">")
-                    .append(AttendanceServer.escape(sub)).append("</option>");
-        }
-
-        String body = "<div class=\"eyebrow\">Teacher Dashboard</div>"
-                + "<h1>Welcome, " + AttendanceServer.escape(teacher.getName()) + "</h1>"
-                + "<p><a class=\"button-link secondary\" href=\"/teacher-logout\">Logout</a></p>"
-                + "<div class=\"action-panel\">"
-                + "<div><strong>Current Session: " + AttendanceServer.escape(activeSub) + "</strong>"
-                + "<span>Class: " + AttendanceServer.escape(tokenService.getActiveClassName()) + " | "
-                + tokenService.getActiveStartTime() + " to " + tokenService.getActiveEndTime() + "</span></div>"
-                + "<a href=\"/teacher-export\" class=\"button-link\">Download CSV Report</a>"
-                + "</div>"
-                + "<div style=\"display:flex; gap:20px; flex-wrap:wrap;\">"
-                + "<div style=\"flex:1; min-width:300px;\"><h2>Start New Session</h2>"
-                + "<form method=\"post\" action=\"/teacher-start-session\">"
-                + "<label>Class Name<input name=\"className\" required value=\"" + AttendanceServer.escape(tokenService.getActiveClassName()) + "\"></label>"
-                + "<label>Subject<select name=\"subject\" required style=\"width:100%; padding:14px; border-radius:12px; border:1px solid #d1d5db; background:#f9fafb; font-size:16px;\">" + subjectOptions + "</select></label>"
-                + "<label>Topic<input name=\"topic\" required value=\"" + AttendanceServer.escape(tokenService.getActiveTopic()) + "\"></label>"
-                + "<div style=\"display:flex;gap:10px;\"><label style=\"flex:1\">Start Time<input type=\"time\" name=\"startTime\" required value=\"" + tokenService.getActiveStartTime() + "\"></label>"
-                + "<label style=\"flex:1\">End Time<input type=\"time\" name=\"endTime\" required value=\"" + tokenService.getActiveEndTime() + "\"></label></div>"
-                + "<button type=\"submit\">Start QR Session</button>"
-                + "</form></div>"
-                + "<div style=\"flex:1; min-width:300px;\"><h2>Live QR Code</h2>"
-                + "<p class=\"muted\">Students scan this code. It refreshes every " + TokenService.REFRESH_SECONDS + " seconds.</p>"
-                + "<iframe src=\"/teacher-qr\" style=\"width:100%; height:320px; border:1px solid var(--line); border-radius:12px; background:white;\"></iframe>"
-                + "</div>"
-                + "</div>"
-                + "<h2>Attendance for Current Session</h2>"
-                + "<table><thead><tr><th>Student ID</th><th>Name</th><th>Marked At</th><th>Status</th></tr></thead>"
-                + "<tbody>" + attendanceRows + "</tbody></table>";
-
-        AttendanceServer.sendHtml(exchange, 200, AttendanceServer.page("Teacher Dashboard", body));
+        AttendanceServer.sendHtml(exchange, 200, AttendanceServer.page("Teacher Dashboard", content.toString()));
     }
 
     public void handleStartSession(HttpExchange exchange) throws IOException {
-        Optional<Teacher> optionalTeacher = currentTeacher(exchange);
-        if (optionalTeacher.isEmpty()) {
+        if (currentTeacher(exchange).isEmpty()) {
             AttendanceServer.redirect(exchange, "/teacher-login");
             return;
         }
-
         if ("POST".equalsIgnoreCase(exchange.getRequestMethod())) {
             String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             Map<String, String> form = AttendanceServer.parseQuery(body);
             
             try {
-                String className = form.get("className");
-                String subject = form.get("subject");
-                String topic = form.get("topic");
-                LocalTime startTime = LocalTime.parse(form.get("startTime"));
-                LocalTime endTime = LocalTime.parse(form.get("endTime"));
-                
-                tokenService.setActiveSession(className, subject, startTime, endTime, topic);
-                AttendanceServer.redirect(exchange, "/teacher-dashboard");
+                tokenService.startSession(
+                    form.get("className"),
+                    form.get("subject"),
+                    LocalTime.parse(form.get("startTime")),
+                    LocalTime.parse(form.get("endTime")),
+                    form.get("topic")
+                );
             } catch (Exception e) {
-                AttendanceServer.sendHtml(exchange, 400, AttendanceServer.page("Error",
-                        "<h1>Invalid Input</h1><p>" + AttendanceServer.escape(e.getMessage()) + "</p><a class=\"button-link\" href=\"/teacher-dashboard\">Back</a>"));
+                AttendanceServer.sendHtml(exchange, 400, AttendanceServer.page("Error", "<h1>Invalid session details</h1><p>" + e.getMessage() + "</p><p><a href='/teacher-dashboard'>Back</a></p>"));
+                return;
             }
+            AttendanceServer.redirect(exchange, "/teacher-dashboard");
         }
     }
 
-    public void handleQr(HttpExchange exchange) throws IOException {
-        Optional<Teacher> optionalTeacher = currentTeacher(exchange);
-        if (optionalTeacher.isEmpty()) {
-            AttendanceServer.sendHtml(exchange, 401, "Unauthorized");
-            return;
-        }
-
-        String baseUrl = exchange.getRequestHeaders().getFirst("Host");
-        String proto = exchange.getRequestHeaders().getFirst("X-Forwarded-Proto");
-        if (proto == null) proto = "http";
-        String fullUrl = proto + "://" + baseUrl + "/scan?subject=" + 
-                java.net.URLEncoder.encode(tokenService.getActiveSubject(), StandardCharsets.UTF_8) + 
-                "&token=" + tokenService.getCurrentToken().getValue();
-
-        boolean[][] matrix = QrCodeGenerator.generateQr(fullUrl);
-        StringBuilder html = new StringBuilder();
-        html.append("<html><head><meta http-equiv=\"refresh\" content=\"").append(TokenService.REFRESH_SECONDS).append("\"></head>");
-        html.append("<body style=\"display:flex; justify-content:center; align-items:center; margin:0; background:white;\">");
-        
-        int size = matrix.length;
-        html.append("<div style=\"display:grid; grid-template-columns:repeat(").append(size).append(", 6px); grid-template-rows:repeat(").append(size).append(", 6px);\">");
-        for (boolean[] row : matrix) {
-            for (boolean cell : row) {
-                html.append("<div style=\"background:").append(cell ? "#000" : "#fff").append(";\"></div>");
-            }
-        }
-        html.append("</div></body></html>");
-
-        AttendanceServer.sendHtml(exchange, 200, html.toString());
-    }
-
-    public void handleExport(HttpExchange exchange) throws IOException {
+    public void handleStopSession(HttpExchange exchange) throws IOException {
         if (currentTeacher(exchange).isEmpty()) {
             AttendanceServer.redirect(exchange, "/teacher-login");
             return;
         }
-
-        String subject = tokenService.getActiveSubject();
-        List<AttendanceRecord> records = store.findAttendanceByDate(LocalDate.now(), subject);
         
-        StringBuilder csv = new StringBuilder();
-        csv.append("Student ID,Student Name,Subject,Date,Start Time,End Time,Marked At\n");
+        // Record the session in the store before stopping
+        if (tokenService.isSessionActive()) {
+            store.recordClassSession(
+                tokenService.getActiveSubject(),
+                LocalDate.now(),
+                tokenService.getActiveClassName(),
+                tokenService.getActiveStartTime(),
+                tokenService.getActiveEndTime(),
+                tokenService.getActiveTopic()
+            );
+        }
+        
+        tokenService.stopSession();
+        AttendanceServer.redirect(exchange, "/teacher-dashboard");
+    }
+
+    public void handleQr(HttpExchange exchange) throws IOException {
+        if (!tokenService.isSessionActive()) {
+            AttendanceServer.sendJson(exchange, 404, "[]");
+            return;
+        }
+        boolean[][] matrix = QrCodeGenerator.generateQr(tokenService.getCurrentToken().getValue());
+        StringBuilder json = new StringBuilder("[");
+        for (int i = 0; i < matrix.length; i++) {
+            json.append("[");
+            for (int j = 0; j < matrix[i].length; j++) {
+                json.append(matrix[i][j]).append(j < matrix[i].length - 1 ? "," : "");
+            }
+            json.append("]").append(i < matrix.length - 1 ? "," : "");
+        }
+        json.append("]");
+        AttendanceServer.sendJson(exchange, 200, json.toString());
+    }
+
+    public void handleExport(HttpExchange exchange) throws IOException {
+        Optional<Teacher> teacher = currentTeacher(exchange);
+        if (teacher.isEmpty() || !tokenService.isSessionActive()) {
+            AttendanceServer.redirect(exchange, "/teacher-login");
+            return;
+        }
+
+        List<AttendanceRecord> records = store.findAttendanceByDate(LocalDate.now(), tokenService.getActiveSubject());
+        StringBuilder csv = new StringBuilder("Student ID,Student Name,Marked At\n");
         for (AttendanceRecord r : records) {
             if (r.getStartTime().equals(tokenService.getActiveStartTime())) {
                 csv.append(r.getStudentId()).append(",")
                    .append(r.getStudentName()).append(",")
-                   .append(r.getSubject()).append(",")
-                   .append(r.getAttendanceDate()).append(",")
-                   .append(r.getStartTime()).append(",")
-                   .append(r.getEndTime()).append(",")
                    .append(r.getMarkedAt()).append("\n");
             }
         }
 
+        exchange.getResponseHeaders().add("Content-Type", "text/csv");
+        exchange.getResponseHeaders().add("Content-Disposition", "attachment; filename=attendance_" + tokenService.getActiveSubject() + ".csv");
         byte[] bytes = csv.toString().getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().set("Content-Type", "text/csv");
-        exchange.getResponseHeaders().set("Content-Disposition", "attachment; filename=attendance_" + subject + "_" + LocalDate.now() + ".csv");
         exchange.sendResponseHeaders(200, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(bytes);
@@ -220,16 +255,15 @@ public class TeacherWebHandler {
 
     private Optional<Teacher> currentTeacher(HttpExchange exchange) throws IOException {
         String sessionId = currentSessionId(exchange);
-        if (sessionId == null) return Optional.empty();
-        String teacherId = teacherSessions.get(sessionId);
-        return teacherId != null ? store.findTeacherById(teacherId) : Optional.empty();
+        if (sessionId == null || !teacherSessions.containsKey(sessionId)) return Optional.empty();
+        return store.findTeacherById(teacherSessions.get(sessionId));
     }
 
     private String currentSessionId(HttpExchange exchange) {
-        String cookieHeader = exchange.getRequestHeaders().getFirst("Cookie");
-        if (cookieHeader == null) return null;
-        for (String cookie : cookieHeader.split(";")) {
-            String[] parts = cookie.trim().split("=", 2);
+        String cookie = exchange.getRequestHeaders().getFirst("Cookie");
+        if (cookie == null) return null;
+        for (String c : cookie.split(";")) {
+            String[] parts = c.trim().split("=");
             if (parts.length == 2 && "TEACHER_SESSION".equals(parts[0])) return parts[1];
         }
         return null;

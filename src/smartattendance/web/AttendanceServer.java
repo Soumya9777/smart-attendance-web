@@ -74,6 +74,7 @@ public class AttendanceServer {
         server.createContext("/teacher-logout", teacherHandler::handleLogout);
         server.createContext("/teacher-dashboard", teacherHandler::handleDashboard);
         server.createContext("/teacher-start-session", teacherHandler::handleStartSession);
+        server.createContext("/teacher-stop-session", teacherHandler::handleStopSession);
         server.createContext("/teacher-qr", teacherHandler::handleQr);
         server.createContext("/teacher-export", teacherHandler::handleExport);
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
@@ -423,6 +424,15 @@ public class AttendanceServer {
     public static void redirect(HttpExchange exchange, String location) throws IOException {
         exchange.getResponseHeaders().set("Location", location);
         exchange.sendResponseHeaders(302, -1);
+    }
+
+    public static void sendJson(HttpExchange exchange, int statusCode, String json) throws IOException {
+        exchange.getResponseHeaders().add("Content-Type", "application/json");
+        byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(statusCode, bytes.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(bytes);
+        }
     }
 
     public static void sendHtml(HttpExchange exchange, int statusCode, String html) throws IOException {
