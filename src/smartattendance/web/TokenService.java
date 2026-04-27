@@ -12,12 +12,14 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class TokenService {
-    public static final int REFRESH_SECONDS = 5;
+    // Increased to 60 seconds because free servers like Render can be slow
+    public static final int REFRESH_SECONDS = 60;
 
     private final SecureRandom random = new SecureRandom();
     private final List<TokenListener> listeners = new CopyOnWriteArrayList<>();
     private ScheduledExecutorService executorService;
     private volatile AttendanceToken currentToken = null;
+    private volatile AttendanceToken previousToken = null;
     
     private volatile boolean sessionActive = false;
     private volatile String activeSubject = "";
@@ -43,9 +45,21 @@ public class TokenService {
     }
 
     public boolean isValid(String tokenValue) {
-        AttendanceToken token = currentToken;
-        if (token == null || !sessionActive) return false;
-        return token.getValue().equals(tokenValue) && Instant.now().isBefore(token.getExpiresAt());
+        if (!sessionActive || tokenValue == null) return false;
+
+        // Check current token
+        AttendanceToken curr = currentToken;
+        if (curr != null && curr.getValue().equals(tokenValue) && Instant.now().isBefore(curr.getExpiresAt())) {
+            return true;
+        }
+
+        // Check previous token (allows a grace period if the QR just updated)
+        AttendanceToken prev = previousToken;
+        if (prev != null && prev.getValue().equals(tokenValue) && Instant.now().isBefore(prev.getExpiresAt().plusSeconds(REFRESH_SECONDS))) {
+            return true;
+        }
+
+        return false;
     }
 
     public boolean isSessionActive() {
@@ -79,6 +93,7 @@ public class TokenService {
     public void stopSession() {
         this.sessionActive = false;
         this.currentToken = null;
+        this.previousToken = null;
     }
 
     public void startSession(String activeClassName, String activeSubject, LocalTime activeStartTime,
@@ -120,8 +135,10 @@ public class TokenService {
     private void rotateToken() {
         if (!sessionActive) {
             currentToken = null;
+            previousToken = null;
             return;
         }
+        previousToken = currentToken;
         currentToken = newToken();
         for (TokenListener listener : listeners) {
             listener.onTokenChanged(currentToken);

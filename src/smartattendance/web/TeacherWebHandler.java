@@ -150,7 +150,7 @@ public class TeacherWebHandler {
                     .append("    document.getElementById('qr-box').innerHTML = svg;")
                     .append("  });")
                     .append("}")
-                    .append("updateQR(); setInterval(updateQR, 5000);")
+                    .append("updateQR(); setInterval(updateQR, 10000);")
                     .append("setInterval(() => { if(window.innerWidth > 800) location.reload(); }, 30000);")
                     .append("</script>");
         }
