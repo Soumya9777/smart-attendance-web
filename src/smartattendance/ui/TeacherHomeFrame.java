@@ -2,93 +2,113 @@ package smartattendance.ui;
 
 import smartattendance.qr.QrCodeGenerator;
 import smartattendance.web.TokenService;
+import smartattendance.store.AttendanceStore;
 
 import javax.swing.*;
 import java.awt.*;
+import java.time.LocalTime;
 
 public class TeacherHomeFrame extends JFrame {
     private final TokenService tokenService;
+    private final AttendanceStore store;
     private final JLabel qrLabel;
     private final JLabel statusLabel;
     private final JLabel infoLabel;
 
-    public TeacherHomeFrame(TokenService tokenService) {
+    public TeacherHomeFrame(TokenService tokenService, AttendanceStore store) {
         this.tokenService = tokenService;
+        this.store = store;
         
-        setTitle("NIST Smart Attendance - Teacher Dashboard");
-        setSize(500, 650);
+        setTitle("Teacher Dashboard");
+        setSize(550, 750);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-        setLayout(new BorderLayout(20, 20));
-        getContentPane().setBackground(new Color(17, 24, 39)); // Dark background
+        setLayout(new BorderLayout(10, 10));
+        getContentPane().setBackground(new Color(243, 244, 246));
 
         // Header
         JPanel header = new JPanel(new GridLayout(2, 1));
-        header.setBackground(new Color(31, 41, 55));
-        header.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-        
-        JLabel titleLabel = new JLabel("Teacher Attendance Portal", SwingConstants.CENTER);
-        titleLabel.setFont(new Font("Inter", Font.BOLD, 24));
-        titleLabel.setForeground(Color.WHITE);
-        header.add(titleLabel);
+        header.setBackground(new Color(79, 70, 229));
+        JLabel title = new JLabel("Smart Attendance - Teacher", SwingConstants.CENTER);
+        title.setForeground(Color.WHITE);
+        title.setFont(new Font("Inter", Font.BOLD, 20));
+        header.add(title);
 
-        infoLabel = new JLabel("No Active Session", SwingConstants.CENTER);
-        infoLabel.setFont(new Font("Inter", Font.PLAIN, 16));
-        infoLabel.setForeground(new Color(156, 163, 175));
+        infoLabel = new JLabel("No Session Active", SwingConstants.CENTER);
+        infoLabel.setForeground(Color.WHITE);
         header.add(infoLabel);
-        
         add(header, BorderLayout.NORTH);
 
-        // QR Area
-        JPanel qrPanel = new JPanel(new GridBagLayout());
-        qrPanel.setBackground(new Color(17, 24, 39));
-        
-        qrLabel = new JLabel();
-        qrLabel.setPreferredSize(new Dimension(350, 350));
+        // QR Center
+        qrLabel = new JLabel("START SESSION", SwingConstants.CENTER);
+        qrLabel.setPreferredSize(new Dimension(300, 300));
         qrLabel.setOpaque(true);
         qrLabel.setBackground(Color.WHITE);
-        qrLabel.setBorder(BorderFactory.createLineBorder(new Color(79, 70, 229), 4));
-        qrPanel.add(qrLabel);
-        
-        add(qrPanel, BorderLayout.CENTER);
+        qrLabel.setBorder(BorderFactory.createLineBorder(Color.GRAY, 1));
+        add(qrLabel, BorderLayout.CENTER);
 
-        // Footer / Status
-        JPanel footer = new JPanel(new BorderLayout());
-        footer.setBackground(new Color(31, 41, 55));
-        footer.setBorder(BorderFactory.createEmptyBorder(15, 20, 15, 20));
+        // Control Panel
+        JPanel controls = new JPanel(new GridLayout(2, 1, 5, 5));
+        JButton startBtn = new JButton("Start Session");
+        JButton stopBtn = new JButton("Stop Session");
+        JButton historyBtn = new JButton("View Records");
 
-        statusLabel = new JLabel("Waiting for session to start on Web Portal...", SwingConstants.CENTER);
-        statusLabel.setFont(new Font("Inter", Font.BOLD, 14));
-        statusLabel.setForeground(new Color(239, 68, 68)); // Red
-        footer.add(statusLabel, BorderLayout.CENTER);
+        startBtn.addActionListener(e -> startSessionDialog());
+        stopBtn.addActionListener(e -> {
+            if (tokenService.isSessionActive()) {
+                try {
+                    store.recordClassSession(tokenService.getActiveSubject(), java.time.LocalDate.now(), 
+                        tokenService.getActiveClassName(), tokenService.getActiveStartTime(), 
+                        tokenService.getActiveEndTime(), tokenService.getActiveTopic());
+                    tokenService.stopSession();
+                } catch (Exception ex) { ex.printStackTrace(); }
+            }
+        });
 
-        add(footer, BorderLayout.SOUTH);
+        JPanel btnGroup = new JPanel();
+        btnGroup.add(startBtn);
+        btnGroup.add(stopBtn);
+        btnGroup.add(historyBtn);
+        controls.add(btnGroup);
 
-        // Timer to update UI
-        Timer timer = new Timer(500, e -> updateUI());
+        statusLabel = new JLabel("Offline", SwingConstants.CENTER);
+        controls.add(statusLabel);
+        add(controls, BorderLayout.SOUTH);
+
+        Timer timer = new Timer(1000, e -> updateUI());
         timer.start();
+    }
+
+    private void startSessionDialog() {
+        try {
+            String className = JOptionPane.showInputDialog("Class Name:");
+            String[] subjects = store.findAllSubjects().toArray(new String[0]);
+            if (subjects.length == 0) {
+                JOptionPane.showMessageDialog(this, "No subjects found. Ask Admin to add subjects.");
+                return;
+            }
+            String subject = (String) JOptionPane.showInputDialog(this, "Select Subject:", "Subject", 
+                JOptionPane.QUESTION_MESSAGE, null, subjects, subjects[0]);
+            String topic = JOptionPane.showInputDialog("Topic:");
+
+            if (className != null && subject != null) {
+                tokenService.startSession(className, subject, LocalTime.now(), LocalTime.now().plusHours(1), topic);
+            }
+        } catch (Exception e) { e.printStackTrace(); }
     }
 
     private void updateUI() {
         if (tokenService.isSessionActive()) {
-            infoLabel.setText(tokenService.getActiveSubject() + " | " + tokenService.getActiveClassName());
-            statusLabel.setText("● SESSION ACTIVE - QR ROTATING (1s)");
-            statusLabel.setForeground(new Color(52, 211, 153)); // Green
+            infoLabel.setText(tokenService.getActiveSubject() + " (" + tokenService.getActiveClassName() + ")");
+            statusLabel.setText("Active: " + tokenService.getCurrentToken().getValue());
             
-            TokenService.AttendanceToken token = tokenService.getCurrentToken();
-            if (token != null) {
-                // Generate QR URL matching the web version
-                String qrUrl = "/scan?token=" + token.getValue() + "&subject=" + tokenService.getActiveSubject();
-                ImageIcon icon = new ImageIcon(QrCodeGenerator.createQrImage(qrUrl, 10, 2));
-                qrLabel.setIcon(icon);
-            }
+            String qrUrl = "/scan?token=" + tokenService.getCurrentToken().getValue() + "&subject=" + tokenService.getActiveSubject();
+            qrLabel.setIcon(new ImageIcon(QrCodeGenerator.createQrImage(qrUrl, 10, 1)));
         } else {
-            infoLabel.setText("No Active Session");
-            statusLabel.setText("Please start a session from the browser first.");
-            statusLabel.setForeground(new Color(239, 68, 68));
+            infoLabel.setText("No Session Active");
+            statusLabel.setText("Ready");
             qrLabel.setIcon(null);
-            qrLabel.setText("Start Session on Web");
-            qrLabel.setHorizontalAlignment(SwingConstants.CENTER);
+            qrLabel.setText("START SESSION");
         }
     }
 }

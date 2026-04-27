@@ -5,67 +5,54 @@ import smartattendance.store.FileAttendanceStore;
 import smartattendance.store.JdbcAttendanceStore;
 import smartattendance.web.AttendanceServer;
 import smartattendance.web.TokenService;
+import smartattendance.ui.UserTypeDialog;
+import smartattendance.ui.LoginDialog;
+import smartattendance.ui.AdminFrame;
+import smartattendance.ui.TeacherHomeFrame;
 
+import javax.swing.*;
 import java.nio.file.Path;
 
 public final class Main {
-    private Main() {
-    }
-
     public static void main(String[] args) throws Exception {
-        System.out.println("Starting Smart Attendance Management System...");
-
         AttendanceStore store;
         String dbUrl = System.getenv("DB_URL");
         if (dbUrl != null && !dbUrl.isBlank()) {
-            System.out.println("Connecting to database: " + dbUrl);
-            String dbUser = System.getenv("DB_USER");
-            String dbPass = System.getenv("DB_PASS");
-            
-            // Register MySQL Driver
-            try {
-                Class.forName("com.mysql.cj.jdbc.Driver");
-            } catch (ClassNotFoundException e) {
-                System.err.println("Warning: MySQL JDBC Driver not found in classpath.");
-            }
-            
-            store = new JdbcAttendanceStore(dbUrl, dbUser, dbPass);
+            store = new JdbcAttendanceStore(dbUrl, System.getenv("DB_USER"), System.getenv("DB_PASS"));
         } else {
-            System.out.println("Using file-based storage (CSV). Set DB_URL to switch to MySQL.");
             store = new FileAttendanceStore(Path.of("data"));
         }
-        
         store.initialize();
 
         TokenService tokenService = new TokenService();
-        
-        int port = 8080;
-        String envPort = System.getenv("PORT");
-        if (envPort != null && !envPort.isBlank()) {
-            try {
-                port = Integer.parseInt(envPort);
-            } catch (NumberFormatException ignored) {}
-        }
-
-        AttendanceServer server = new AttendanceServer(port, store, tokenService);
+        AttendanceServer server = new AttendanceServer(8080, store, tokenService);
         server.start();
         tokenService.start();
 
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            tokenService.stop();
-            server.stop();
-        }));
-
-        System.out.println("Server is running on " + server.getBaseUrl());
-
-        // Launch GUI if not headless (on your Mac)
         if (!java.awt.GraphicsEnvironment.isHeadless()) {
-            javax.swing.SwingUtilities.invokeLater(() -> {
-                new smartattendance.ui.TeacherHomeFrame(tokenService).setVisible(true);
-                System.out.println("Desktop GUI launched successfully.");
+            SwingUtilities.invokeLater(() -> {
+                UserTypeDialog typeDialog = new UserTypeDialog(null);
+                typeDialog.setVisible(true);
+                String type = typeDialog.getUserType();
+
+                if (type != null) {
+                    LoginDialog login = new LoginDialog(null, store, type);
+                    login.setVisible(true);
+                    if (login.isAuthenticated()) {
+                        if ("ADMIN".equals(type)) {
+                            new AdminFrame(store).setVisible(true);
+                        } else {
+                            new TeacherHomeFrame(tokenService, store).setVisible(true);
+                        }
+                    } else {
+                        System.exit(0);
+                    }
+                } else {
+                    System.exit(0);
+                }
             });
         }
 
-        System.out.println("Press Ctrl+C to stop the server.");
+        System.out.println("Web Server running for students at: " + server.getBaseUrl());
     }
 }
