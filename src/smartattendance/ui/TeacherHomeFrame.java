@@ -223,11 +223,13 @@ public class TeacherHomeFrame extends JFrame {
             JComboBox<String> subjectCombo = new JComboBox<>(subjects);
             JTextField classField = new JTextField();
             JTextField topicField = new JTextField();
+            JTextField durationField = new JTextField("60"); // Default 60 mins
 
             Object[] message = {
                 "Select Subject:", subjectCombo,
                 "Class Name (e.g. CS-2024):", classField,
-                "Topic (e.g. Java Basics):", topicField
+                "Topic (e.g. Java Basics):", topicField,
+                "Duration (Minutes):", durationField
             };
 
             int option = JOptionPane.showConfirmDialog(this, message, "Start New Session", JOptionPane.OK_CANCEL_OPTION);
@@ -236,9 +238,17 @@ public class TeacherHomeFrame extends JFrame {
                 String subject = (String) subjectCombo.getSelectedItem();
                 String className = classField.getText();
                 String topic = topicField.getText();
+                int duration = 60;
+                try {
+                    duration = Integer.parseInt(durationField.getText());
+                } catch (NumberFormatException e) {
+                    JOptionPane.showMessageDialog(this, "Invalid duration. Using 60 minutes.");
+                }
 
                 if (subject != null && !className.isBlank()) {
-                    tokenService.startSession(className, subject, LocalTime.now(), LocalTime.now().plusHours(1), topic);
+                    LocalTime start = LocalTime.now();
+                    LocalTime end = start.plusMinutes(duration);
+                    tokenService.startSession(className, subject, start, end, topic);
                 } else {
                     JOptionPane.showMessageDialog(this, "Subject and Class Name are required!");
                 }
