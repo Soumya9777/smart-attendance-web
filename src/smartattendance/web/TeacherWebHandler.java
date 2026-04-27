@@ -151,7 +151,7 @@ public class TeacherWebHandler {
                     .append("    qr.makeCode(data.url);")
                     .append("  });")
                     .append("}")
-                    .append("updateQR(); setInterval(updateQR, 5000);")
+                    .append("updateQR(); setInterval(updateQR, 1000);")
                     .append("setInterval(() => { if(window.innerWidth > 800) location.reload(); }, 20000);")
                     .append("</script>");
         }

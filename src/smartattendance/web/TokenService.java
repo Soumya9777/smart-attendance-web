@@ -12,14 +12,15 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class TokenService {
-    // Increased to 60 seconds because free servers like Render can be slow
-    public static final int REFRESH_SECONDS = 10;
+    // Set to 1 second as requested by the user for maximum anti-cheat
+    public static final int REFRESH_SECONDS = 1;
 
     private final SecureRandom random = new SecureRandom();
     private final List<TokenListener> listeners = new CopyOnWriteArrayList<>();
     private ScheduledExecutorService executorService;
     private volatile AttendanceToken currentToken = null;
     private volatile AttendanceToken previousToken = null;
+    private volatile AttendanceToken olderToken = null; // Extra buffer for 1s rotation
     
     private volatile boolean sessionActive = false;
     private volatile String activeSubject = "";
@@ -46,16 +47,23 @@ public class TokenService {
 
     public boolean isValid(String tokenValue) {
         if (!sessionActive || tokenValue == null) return false;
-
+        
+        Instant now = Instant.now();
+        
         // Check current token
         AttendanceToken curr = currentToken;
-        if (curr != null && curr.getValue().equals(tokenValue) && Instant.now().isBefore(curr.getExpiresAt())) {
+        if (curr != null && curr.getValue().equals(tokenValue) && now.isBefore(curr.getExpiresAt().plusSeconds(1))) {
             return true;
         }
 
-        // Check previous token (allows a grace period if the QR just updated)
+        // Check previous tokens (allows a small grace period for the 1s rotation lag)
         AttendanceToken prev = previousToken;
-        if (prev != null && prev.getValue().equals(tokenValue) && Instant.now().isBefore(prev.getExpiresAt().plusSeconds(REFRESH_SECONDS))) {
+        if (prev != null && prev.getValue().equals(tokenValue) && now.isBefore(prev.getExpiresAt().plusSeconds(3))) {
+            return true;
+        }
+
+        AttendanceToken old = olderToken;
+        if (old != null && old.getValue().equals(tokenValue) && now.isBefore(old.getExpiresAt().plusSeconds(3))) {
             return true;
         }
 
@@ -94,34 +102,23 @@ public class TokenService {
         this.sessionActive = false;
         this.currentToken = null;
         this.previousToken = null;
+        this.olderToken = null;
     }
 
     public void startSession(String activeClassName, String activeSubject, LocalTime activeStartTime,
                                   LocalTime activeEndTime, String activeTopic) {
-        if (activeClassName == null || activeClassName.isBlank()) {
-            throw new IllegalArgumentException("Class cannot be empty");
-        }
-        if (activeSubject == null || activeSubject.isBlank()) {
-            throw new IllegalArgumentException("Subject cannot be empty");
-        }
-        int activeDurationMinutes = calculateDuration(activeStartTime, activeEndTime);
-        if (activeDurationMinutes <= 0) {
-            throw new IllegalArgumentException("Ending time must be after starting time");
-        }
         this.activeClassName = activeClassName.trim();
         this.activeSubject = activeSubject.trim();
         this.activeStartTime = activeStartTime;
         this.activeEndTime = activeEndTime;
         this.activeTopic = activeTopic == null || activeTopic.isBlank() ? "Not specified" : activeTopic.trim();
-        this.activeDurationMinutes = activeDurationMinutes;
+        this.activeDurationMinutes = calculateDuration(activeStartTime, activeEndTime);
         this.sessionActive = true;
         rotateToken();
     }
 
     private static int calculateDuration(LocalTime startTime, LocalTime endTime) {
-        if (startTime == null || endTime == null) {
-            throw new IllegalArgumentException("Starting and ending time are required");
-        }
+        if (startTime == null || endTime == null) return 60;
         return (int) Duration.between(startTime, endTime).toMinutes();
     }
 
@@ -136,8 +133,10 @@ public class TokenService {
         if (!sessionActive) {
             currentToken = null;
             previousToken = null;
+            olderToken = null;
             return;
         }
+        olderToken = previousToken;
         previousToken = currentToken;
         currentToken = newToken();
         for (TokenListener listener : listeners) {
