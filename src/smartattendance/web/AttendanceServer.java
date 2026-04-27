@@ -194,38 +194,52 @@ public class AttendanceServer {
         }
 
         Student student = optionalStudent.get();
-        StringBuilder rows = new StringBuilder();
-        StringBuilder dateDetails = new StringBuilder();
+        StringBuilder subjectCards = new StringBuilder();
         List<String> studentSubjects = store.findSubjectsForStudent(student.getId());
+        
         for (String subject : studentSubjects) {
             int total = store.countClassSessions(subject);
             int present = store.countStudentAttendance(student.getId(), subject);
+            int absent = total - present;
             double percentage = total == 0 ? 0 : (present * 100.0 / total);
             int percentageWidth = (int) Math.round(Math.min(100, percentage));
-            rows.append("<tr><td><strong>").append(escape(subject)).append("</strong></td><td>").append(present)
-                    .append("</td><td>").append(total).append("</td><td>")
-                    .append("<div class=\"percent\"><span>").append(String.format("%.2f%%", percentage))
-                    .append("</span><div class=\"bar\"><i style=\"width:")
-                    .append(percentageWidth).append("%\"></i></div></div></td></tr>");
-            dateDetails.append(buildDateDetails(student.getId(), subject));
-        }
-        if (studentSubjects.isEmpty()) {
-            rows.append("<tr><td colspan=\"4\" class=\"muted\">No subjects yet. Scan your first class QR to add a subject.</td></tr>");
-            dateDetails.append("<section class=\"date-card\"><p class=\"muted\">No date-wise records yet.</p></section>");
+            
+            String subjectId = "sub_" + subject.replaceAll("[^a-zA-Z0-9]", "");
+            
+            subjectCards.append("<div class=\"subject-card\" onclick=\"toggleDetails('").append(subjectId).append("')\">")
+                    .append("<div class=\"subject-header\">")
+                    .append("<h3>").append(escape(subject)).append("</h3>")
+                    .append("<span class=\"percent-badge\">").append(String.format("%.1f%%", percentage)).append("</span>")
+                    .append("</div>")
+                    .append("<div class=\"stats-grid\">")
+                    .append("<div class=\"stat\"><b>").append(present).append("</b><span>Present</span></div>")
+                    .append("<div class=\"stat\"><b>").append(absent).append("</b><span>Absent</span></div>")
+                    .append("<div class=\"stat\"><b>").append(total).append("</b><span>Total</span></div>")
+                    .append("</div>")
+                    .append("<div class=\"bar\"><i style=\"width:").append(percentageWidth).append("%\"></i></div>")
+                    .append("<div id=\"").append(subjectId).append("\" class=\"history-details\" style=\"display:none;\">")
+                    .append("<hr>")
+                    .append(buildDateDetails(student.getId(), subject))
+                    .append("</div>")
+                    .append("</div>");
         }
 
-        String body = "<div class=\"eyebrow\">Student Dashboard</div>"
-                + "<h1>Welcome, " + escape(student.getName()) + "</h1>"
-                + "<p><a class=\"button-link secondary\" href=\"/student-logout\">Logout</a></p>"
-                + "<p class=\"muted\">You are logged in. Now use the scan option when the teacher starts the QR session.</p>"
-                + "<div class=\"action-panel\"><div><strong>Active Subject</strong><span>"
-                + escape(tokenService.getActiveSubject()) + "</span></div>"
-                + "<a class=\"button-link\" href=\"/student-scan\">Open QR Scanner</a></div>"
-                + "<h2>Subject Attendance</h2>"
-                + "<table><thead><tr><th>Subject</th><th>Present</th><th>Total</th><th>Percentage</th></tr></thead>"
-                + "<tbody>" + rows + "</tbody></table>"
-                + "<h2>Date-wise Status</h2>"
-                + dateDetails;
+        if (studentSubjects.isEmpty()) {
+            subjectCards.append("<div class=\"warning\">No attendance recorded yet. Scan a QR code to start!</div>");
+        }
+
+        String body = "<div class=\"header-flex\">"
+                + "<div><div class=\"eyebrow\">Student Portal</div><h1>" + escape(student.getName()) + "</h1></div>"
+                + "<a class=\"logout-icon\" href=\"/student-logout\" title=\"Logout\">Logout</a>"
+                + "</div>"
+                + "<div class=\"action-panel\">"
+                + "<div><strong>Active Session</strong><span>" + escape(tokenService.getActiveSubject().isEmpty() ? "No active class" : tokenService.getActiveSubject()) + "</span></div>"
+                + "<a class=\"button-link\" href=\"/student-scan\">Start Scanning</a>"
+                + "</div>"
+                + "<h2>My Attendance</h2>"
+                + "<div class=\"subjects-grid\">" + subjectCards + "</div>"
+                + "<script>function toggleDetails(id){const el=document.getElementById(id);el.style.display=el.style.display==='none'?'block':'none';event.stopPropagation();}</script>";
+        
         sendHtml(exchange, 200, page("Student Dashboard", body));
     }
 
@@ -237,32 +251,31 @@ public class AttendanceServer {
         }
 
         String body = "<div class=\"eyebrow\">QR Scanner</div>"
-                + "<h1>Live QR Scanner</h1>"
-                + "<p class=\"muted\">Point your camera at the teacher's QR code.</p>"
-                + "<div id=\"scanner-container\" style=\"position:relative; width:100%; max-width:500px; aspect-ratio:1/1; margin:20px auto; background:#000; border-radius:20px; overflow:hidden; border:4px solid var(--primary);\">"
+                + "<h1>Mark Attendance</h1>"
+                + "<div id=\"scanner-container\" style=\"position:relative; width:100%; aspect-ratio:1/1; background:#000; border-radius:24px; overflow:hidden; box-shadow:0 20px 40px rgba(0,0,0,0.2);\">"
                 + "<video id=\"preview\" style=\"width:100%; height:100%; object-fit:cover;\" autoplay playsinline></video>"
-                + "<div id=\"scan-line\" style=\"position:absolute; top:0; left:0; width:100%; height:2px; background:var(--primary); box-shadow:0 0 15px var(--primary); animation:scan 2s infinite;\"></div>"
+                + "<div id=\"scan-line\" style=\"position:absolute; top:0; left:0; width:100%; height:4px; background:var(--primary); box-shadow:0 0 20px var(--primary); animation:scan 2s infinite;\"></div>"
                 + "</div>"
                 + "<canvas id=\"scanCanvas\" hidden></canvas>"
-                + "<p id=\"scanStatus\" class=\"muted\">Initializing camera...</p>"
-                + "<p><a class=\"button-link secondary\" href=\"/student-dashboard\">Cancel</a></p>"
+                + "<p id=\"scanStatus\" style=\"text-align:center; margin-top:20px; font-weight:600; color:var(--muted);\">Initializing camera...</p>"
+                + "<a class=\"button-link secondary\" style=\"width:100%; text-align:center; margin-top:10px;\" href=\"/student-dashboard\">Cancel</a>"
                 + "<style>@keyframes scan { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }</style>"
                 + "<script src=\"https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js\"></script>"
                 + "<script>"
                 + "const status=document.getElementById('scanStatus');const video=document.getElementById('preview');const canvas=document.getElementById('scanCanvas');const ctx=canvas.getContext('2d');"
                 + "let scanning=true;"
-                + "function go(url){if(!url||!url.includes('/scan?')){status.textContent='Invalid QR. Scan the teacher session QR.';scanning=true;return;}location.href=url;}"
+                + "function go(url){if(!url||!url.includes('/scan?')){status.textContent='Not a valid attendance QR.';scanning=true;return;}location.href=url;}"
                 + "function scan(){if(!scanning)return;try{"
                 + "if(video.readyState>=2&&video.videoWidth>0){"
                 + "canvas.width=video.videoWidth;canvas.height=video.videoHeight;"
                 + "ctx.drawImage(video,0,0,canvas.width,canvas.height);"
                 + "const imageData=ctx.getImageData(0,0,canvas.width,canvas.height);"
                 + "const code=jsQR(imageData.data,imageData.width,imageData.height,{inversionAttempts:'dontInvert'});"
-                + "if(code){scanning=false;status.textContent='QR Detected! Marking attendance...';go(code.data);return;}}"
+                + "if(code){scanning=false;status.textContent='QR Detected! Marking...';go(code.data);return;}}"
                 + "}catch(e){console.error(e);}requestAnimationFrame(scan);}"
                 + "navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}).then(stream => {"
-                + "video.srcObject=stream;video.play();status.textContent='Camera Active. Scanning...';scan();"
-                + "}).catch(err => {status.textContent='Camera Error: '+(err.message||'Check permissions or HTTPS');});"
+                + "video.srcObject=stream;video.play();status.textContent='Scanning...';scan();"
+                + "}).catch(err => {status.textContent='Camera Error. Enable permissions.';});"
                 + "</script>";
         sendHtml(exchange, 200, page("Scan QR", body));
     }
@@ -271,24 +284,19 @@ public class AttendanceServer {
         List<ClassSession> classSessions = store.findClassSessions(subject);
         List<AttendanceRecord> presentRecords = store.findStudentAttendanceRecords(studentId, subject);
         StringBuilder details = new StringBuilder();
-        details.append("<section class=\"date-card\"><h3>").append(escape(subject)).append("</h3>");
-        if (classSessions.isEmpty()) {
-            details.append("<p class=\"muted\">No class sessions recorded yet.</p></section>");
-            return details.toString();
-        }
+        if (classSessions.isEmpty()) return "<p class=\"muted\">No logs.</p>";
 
-        details.append("<div class=\"date-grid\">");
-        for (ClassSession session : classSessions) {
+        details.append("<div class=\"mini-date-list\">");
+        for (int i = classSessions.size() - 1; i >= 0; i--) {
+            ClassSession session = classSessions.get(i);
             boolean present = hasAttendanceForSession(presentRecords, session);
-            details.append("<span class=\"status ")
-                    .append(present ? "present" : "absent")
-                    .append("\"><b>").append(session.getDate())
-                    .append("</b><span>").append(session.getStartTime()).append("-").append(session.getEndTime())
-                    .append("</span><span>").append(escape(session.getTopic()))
-                    .append("</span><em>").append(present ? "Present" : "Absent")
-                    .append("</em></span>");
+            details.append("<div class=\"log-item ").append(present ? "present" : "absent").append("\">")
+                    .append("<div><b>").append(session.getDate()).append("</b><br>")
+                    .append("<small style=\"opacity:0.8\">").append(session.getStartTime()).append(" - ").append(session.getEndTime()).append("</small></div>")
+                    .append("<span>").append(present ? "✅ Present" : "❌ Absent").append("</span>")
+                    .append("</div>");
         }
-        details.append("</div></section>");
+        details.append("</div>");
         return details.toString();
     }
 
@@ -447,30 +455,37 @@ public class AttendanceServer {
 
     public static String page(String title, String body) {
         return "<!doctype html><html><head><meta charset=\"utf-8\">"
-                + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no\">"
                 + "<title>" + escape(title) + "</title>"
                 + "<style>"
                 + "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');"
                 + ":root{--primary:#4f46e5;--primary-hover:#4338ca;--dark:#111827;--muted:#6b7280;--line:#e5e7eb;--bg-gradient:linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);--green:#059669;--card-bg:rgba(255, 255, 255, 0.95)}"
-                + "*{box-sizing:border-box}body{font-family:'Inter',sans-serif;margin:0;background:var(--bg-gradient);color:#1f2937;display:grid;place-items:center;min-height:100vh;padding:24px}"
-                + "main{width:min(760px,100%);background:var(--card-bg);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:0;border:1px solid rgba(255,255,255,0.4);border-radius:24px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.15);overflow:hidden;animation:fade-in 0.6s cubic-bezier(0.16,1,0.3,1)}"
+                + "*{box-sizing:border-box}body{font-family:'Inter',sans-serif;margin:0;background:var(--bg-gradient);color:#1f2937;min-height:100vh;padding:12px;overflow-x:hidden}"
+                + "main{width:100%;max-width:760px;margin:0 auto;background:var(--card-bg);backdrop-filter:blur(10px);border-radius:24px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.15);overflow:hidden;animation:fade-in 0.6s cubic-bezier(0.16,1,0.3,1)}"
                 + "@keyframes fade-in{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}"
-                + ".brand{display:flex;align-items:center;gap:20px;background:linear-gradient(135deg, var(--dark), #1f2937);padding:24px 32px}.brand img{width:86px;height:auto;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.3))}.brand strong{display:block;color:white;font-size:24px;letter-spacing:-0.02em}.brand span{display:block;color:#9ca3af;margin-top:6px;font-size:14px}"
-                + ".content{padding:36px 32px}.eyebrow{display:inline-block;margin-bottom:12px;color:var(--primary);font-size:13px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase}"
-                + ".success{color:var(--green)}h1{margin:0 0 16px;font-size:32px;color:var(--dark);letter-spacing:-0.03em;font-weight:800}h2{font-size:20px;margin:32px 0 16px;color:var(--dark);font-weight:700;letter-spacing:-0.01em}"
-                + "p{line-height:1.6;font-size:16px}.muted{color:var(--muted)}a{color:var(--primary);font-weight:600;text-decoration:none;transition:color 0.2s}a:hover{color:var(--primary-hover)}"
-                + ".button-link{display:inline-block;background:var(--primary);color:white!important;padding:14px 24px;border-radius:12px;box-shadow:0 4px 6px -1px rgba(79,70,229,0.3);transition:all 0.2s cubic-bezier(0.4,0,0.2,1)}.button-link:hover{transform:translateY(-2px);box-shadow:0 10px 15px -3px rgba(79,70,229,0.4);background:var(--primary-hover)}"
-                + ".action-panel{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:28px 0;padding:20px 24px;border:1px solid var(--line);border-radius:16px;background:rgba(249,250,251,0.8);box-shadow:inset 0 2px 4px rgba(0,0,0,0.02)}.action-panel span{display:block;color:var(--muted);margin-top:6px;font-size:15px}"
-                + ".secondary{background:#f3f4f6!important;color:var(--dark)!important;box-shadow:none!important}.secondary:hover{background:#e5e7eb!important;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1)!important}video{width:100%;max-height:400px;background:#000;border-radius:16px;margin:16px 0;box-shadow:0 10px 25px -5px rgba(0,0,0,0.3)}"
-                + ".warning{padding:16px 20px;border-radius:12px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;display:flex;align-items:center;gap:12px;font-weight:500}"
-                + "table{width:100%;border-collapse:separate;border-spacing:0;margin-top:16px;border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05)}"
-                + "th,td{text-align:left;border-bottom:1px solid var(--line);padding:16px;font-size:15px}th{background:#f9fafb;color:#374151;font-weight:600;text-transform:uppercase;font-size:12px;letter-spacing:0.05em}tr:last-child td{border-bottom:0}tbody tr{transition:background 0.2s}tbody tr:hover{background:#f9fafb}"
-                + ".date-card{border:1px solid var(--line);border-radius:16px;padding:20px;margin:16px 0;background:#ffffff;box-shadow:0 2px 4px rgba(0,0,0,0.02)}.date-card h3{margin:0 0 16px;color:var(--dark);font-size:18px}.date-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}.status{border-radius:12px;padding:14px;border:1px solid var(--line);transition:transform 0.2s}.status:hover{transform:translateY(-2px)}.status b,.status span,.status em{display:block}.status span{color:var(--muted);font-size:13px;margin-top:4px}.status em{font-style:normal;margin-top:6px;font-weight:700}.present{background:#ecfdf5;border-color:#a7f3d0}.present em{color:var(--green)}.absent{background:#fef2f2;border-color:#fecaca}.absent em{color:#dc2626}"
-                + ".percent{display:flex;align-items:center;gap:12px}.percent span{font-weight:700;min-width:55px}.bar{height:8px;background:#e5e7eb;border-radius:999px;flex-grow:1;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg, #34d399, #059669);border-radius:999px;transition:width 1s cubic-bezier(0.4,0,0.2,1)}"
-                + "label{display:block;margin:20px 0;font-weight:600;color:#374151;font-size:15px}"
-                + "input{width:100%;padding:14px 16px;margin-top:8px;border:1px solid #d1d5db;border-radius:12px;font-size:16px;transition:all 0.2s;background:#f9fafb}input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 4px rgba(79,70,229,0.1);background:#fff}"
-                + "button{width:100%;padding:16px;border:0;border-radius:12px;background:var(--primary);color:white;font-weight:700;font-size:16px;cursor:pointer;box-shadow:0 4px 6px -1px rgba(79,70,229,0.3);transition:all 0.2s}button:hover{background:var(--primary-hover);transform:translateY(-2px);box-shadow:0 10px 15px -3px rgba(79,70,229,0.4)}"
-                + "</style></head><body><main><div class=\"brand\"><img src=\"/logo.png\" alt=\"NIST logo\"><div><strong>NIST Attendance Portal</strong><span>Smart Attendance Management System</span></div></div><div class=\"content\">"
+                + ".brand{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg, var(--dark), #1f2937);padding:20px 24px}.brand img{width:50px;height:auto}.brand strong{display:block;color:white;font-size:18px}.brand span{display:block;color:#9ca3af;font-size:12px}"
+                + ".content{padding:24px 20px}.eyebrow{display:inline-block;margin-bottom:8px;color:var(--primary);font-size:12px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase}"
+                + "h1{margin:0 0 16px;font-size:24px;color:var(--dark);letter-spacing:-0.03em;font-weight:800}h2{font-size:18px;margin:24px 0 12px;color:var(--dark);font-weight:700}"
+                + ".header-flex{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}"
+                + ".logout-icon{padding:8px 16px;background:#fee2e2;color:#dc2626;border-radius:12px;font-size:13px;font-weight:700;text-decoration:none}"
+                + ".action-panel{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:20px 0;padding:16px;border:1px solid var(--line);border-radius:16px;background:white;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05)}"
+                + ".action-panel strong{display:block;font-size:12px;color:var(--muted);text-transform:uppercase}.action-panel span{display:block;font-weight:700;color:var(--dark);font-size:15px}"
+                + ".button-link{display:inline-block;background:var(--primary);color:white!important;padding:12px 20px;border-radius:12px;font-weight:600;text-decoration:none;transition:all 0.2s}.button-link:hover{transform:translateY(-1px);background:var(--primary-hover)}"
+                + ".secondary{background:#f3f4f6!important;color:var(--dark)!important}"
+                + ".subjects-grid{display:grid;grid-template-columns:1fr;gap:16px}"
+                + ".subject-card{background:white;border:1px solid var(--line);border-radius:20px;padding:20px;cursor:pointer;transition:all 0.2s;box-shadow:0 2px 4px rgba(0,0,0,0.02)}.subject-card:hover{border-color:var(--primary);box-shadow:0 10px 15px -3px rgba(0,0,0,0.1)}"
+                + ".subject-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.subject-header h3{margin:0;font-size:16px;color:var(--dark)}"
+                + ".percent-badge{background:var(--primary);color:white;padding:4px 10px;border-radius:8px;font-weight:700;font-size:13px}"
+                + ".stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}"
+                + ".stat{text-align:center}.stat b{display:block;font-size:18px;color:var(--dark)}.stat span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase}"
+                + ".bar{height:6px;background:#f3f4f6;border-radius:10px;overflow:hidden}.bar i{display:block;height:100%;background:var(--primary);border-radius:10px}"
+                + ".history-details{margin-top:16px;animation:slide-down 0.3s ease-out}@keyframes slide-down{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}"
+                + ".mini-date-list{display:flex;flex-direction:column;gap:8px;max-height:200px;overflow-y:auto;padding-right:4px}"
+                + ".log-item{display:flex;justify-content:space-between;padding:10px;border-radius:10px;font-size:13px}.present{background:#ecfdf5;color:#065f46}.absent{background:#fff1f2;color:#991b1b}"
+                + "form label{display:block;margin-bottom:16px;font-weight:600;color:var(--muted);font-size:14px}"
+                + "form input{width:100%;padding:14px;margin-top:8px;border:1px solid var(--line);border-radius:12px;font-size:16px;background:#f9fafb}"
+                + "form button{width:100%;padding:16px;background:var(--primary);color:white;border:0;border-radius:12px;font-weight:700;font-size:16px;margin-top:12px}"
+                + "</style></head><body><main><div class=\"brand\"><img src=\"/logo.png\" alt=\"NIST\"><div><strong>NIST Attendance</strong><span>Smart Campus Portal</span></div></div><div class=\"content\">"
                 + body + "</div></main></body></html>";
     }
 

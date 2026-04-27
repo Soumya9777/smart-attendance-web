@@ -48,10 +48,15 @@ public final class Main {
             LoginDialog login = new LoginDialog(null, store, type);
             login.setVisible(true);
             if (login.isAuthenticated()) {
+                Object user = login.getUser();
+                String name = "User";
+                if (user instanceof smartattendance.model.Admin) name = ((smartattendance.model.Admin)user).getName();
+                if (user instanceof smartattendance.model.Teacher) name = ((smartattendance.model.Teacher)user).getName();
+
                 if ("ADMIN".equals(type)) {
                     new AdminFrame(store, Main::showUserSelection).setVisible(true);
                 } else {
-                    new TeacherHomeFrame(tokenService, store, server.getBaseUrl(), Main::showUserSelection).setVisible(true);
+                    new TeacherHomeFrame(tokenService, store, server.getBaseUrl(), name, Main::showUserSelection).setVisible(true);
                 }
             } else {
                 showUserSelection();
